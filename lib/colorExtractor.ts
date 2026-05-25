@@ -17,7 +17,9 @@ export async function extractColors(imageUrl: string): Promise<TrackColors> {
     img.onload = () => {
       try {
         // Dynamically import colorthief (browser-only)
-        import("colorthief").then(({ default: ColorThief }) => {
+        import("colorthief").then(({ default: ColorThiefModule }) => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const ColorThief = ColorThiefModule as any;
           const thief = new ColorThief();
           const dominant = thief.getColor(img) as [number, number, number];
           const palette = (thief.getPalette(img, 3) ?? []) as [number, number, number][];

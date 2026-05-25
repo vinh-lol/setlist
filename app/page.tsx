@@ -34,9 +34,6 @@ export default function Home() {
         </p>
       </div>
       <LoginButton />
-      {session?.error === "RefreshAccessTokenError" && (
-        <p className="text-red-400 text-sm">Session expired. Please sign in again.</p>
-      )}
     </div>
   );
 }

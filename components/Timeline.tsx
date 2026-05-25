@@ -18,7 +18,7 @@ interface Props {
 }
 
 export default function Timeline({ entries, partyStart, accessToken, playedCount = 0, onReorder, queuedIds = [] }: Props) {
-  const songRefs = useRef(entries.map(() => createRef<HTMLDivElement | null>()));
+  const songRefs = useRef(entries.map(() => createRef<HTMLDivElement>()));
   const nowPlaying = useCurrentlyPlaying(accessToken);
 
   const [dragIdx, setDragIdx] = useState<number | null>(null);

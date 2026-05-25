@@ -49,12 +49,12 @@ export default async function ViewPage({
   const { s } = await searchParams;
 
   if (!s) {
-    return <ViewClient tracks={[]} partyStartMs={Date.now()} error />;
+    return <ViewClient code="" initialTracks={[]} initialPlayedTracks={[]} initialPartyStartMs={Date.now()} error />;
   }
 
   const decoded = decodeSetlist(s);
   if (!decoded) {
-    return <ViewClient tracks={[]} partyStartMs={Date.now()} error />;
+    return <ViewClient code="" initialTracks={[]} initialPlayedTracks={[]} initialPartyStartMs={Date.now()} error />;
   }
 
   let tracks: SpotifyTrack[] = decoded.tracks;
@@ -70,5 +70,5 @@ export default async function ViewPage({
     // use decoded tracks as-is (no album art)
   }
 
-  return <ViewClient tracks={tracks} partyStartMs={decoded.partyStart.getTime()} />;
+  return <ViewClient code="" initialTracks={tracks} initialPlayedTracks={[]} initialPartyStartMs={decoded.partyStart.getTime()} />;
 }
