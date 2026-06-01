@@ -46,6 +46,8 @@ export default function SetlistPage() {
   const [saveOpen, setSaveOpen] = useState(false);
   const [mySetsOpen, setMySetsOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [mobileTab, setMobileTab] = useState<"timeline" | "queue">("timeline");
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [queuedIds, setQueuedIds] = useState<string[]>([]);
   const [playedTracks, setPlayedTracks] = useState<SpotifyTrack[]>([]);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -440,105 +442,150 @@ export default function SetlistPage() {
           onClose={() => setImportOpen(false)}
         />
       )}
-      <header className="flex items-center justify-between px-5 py-3 border-b border-zinc-800 shrink-0 gap-3">
-        <h1 className="text-xl font-black tracking-tighter select-none">SETLIST</h1>
+      <header className="flex items-center justify-between px-4 py-3 border-b border-zinc-800 shrink-0 gap-2">
+        <h1 className="text-xl font-black tracking-tighter select-none shrink-0">SETLIST</h1>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 min-w-0 flex-1 justify-end">
           {session?.accessToken && (
             <SearchPicker accessToken={session.accessToken} onAdd={addTrack} />
           )}
           <TimePicker value={partyStart} onChange={setPartyStart} />
 
-          {/* Divider */}
-          <div className="w-px h-5 bg-zinc-700 mx-1" />
+          {/* Desktop-only action buttons */}
+          <div className="hidden md:flex items-center gap-1.5">
+            <div className="w-px h-5 bg-zinc-700 mx-1" />
 
-          {/* Import playlist */}
-          {session?.accessToken && (
-            <button
-              onClick={() => setImportOpen(true)}
-              title="Import Playlist"
-              className="p-2 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
-            >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
-              </svg>
-            </button>
-          )}
-
-          {/* My Sets */}
-          <button
-            onClick={() => setMySetsOpen(true)}
-            title="My Sets"
-            className="p-2 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
-          >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-            </svg>
-          </button>
-
-          {/* Save */}
-          {tracks.length > 0 && (
-            <button
-              onClick={() => setSaveOpen(true)}
-              title="Save Setlist"
-              className="p-2 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
-            >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
-              </svg>
-            </button>
-          )}
-
-          {/* Share */}
-          {tracks.length > 0 && (
-            <button
-              onClick={async () => {
-                if (shareCode) { setShareOpen(true); return; }
-                setShareLoading(true);
-                try {
-                  const res = await fetch("/api/setlists", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ tracks, partyStartMs: partyStart.getTime() }),
-                  });
-                  const { code } = await res.json();
-                  setShareCode(code);
-                  setShareUrl(`${window.location.origin}/view/${code}`);
-                  setShareOpen(true);
-                } finally {
-                  setShareLoading(false);
-                }
-              }}
-              disabled={shareLoading}
-              title={shareCode ? "View Share Link" : "Share Setlist"}
-              className={`p-2 rounded-lg transition-colors disabled:opacity-40 ${shareCode ? "text-[#1DB954] hover:bg-zinc-800" : "text-zinc-400 hover:text-white hover:bg-zinc-800"}`}
-            >
-              {shareLoading ? (
-                <div className="w-[15px] h-[15px] border border-zinc-400 border-t-transparent rounded-full animate-spin" />
-              ) : (
+            {session?.accessToken && (
+              <button onClick={() => setImportOpen(true)} title="Import Playlist" className="p-2 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
-                  <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+                  <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
                 </svg>
-              )}
+              </button>
+            )}
+
+            <button onClick={() => setMySetsOpen(true)} title="My Sets" className="p-2 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+              </svg>
             </button>
-          )}
 
-          {/* Divider */}
-          <div className="w-px h-5 bg-zinc-700 mx-1" />
+            {tracks.length > 0 && (
+              <button onClick={() => setSaveOpen(true)} title="Save Setlist" className="p-2 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
+                </svg>
+              </button>
+            )}
 
-          {/* Sign out */}
-          <button
-            onClick={() => signOut({ callbackUrl: "/" })}
-            title="Sign Out"
-            className="p-2 rounded-lg text-zinc-600 hover:text-zinc-400 hover:bg-zinc-800 transition-colors"
-          >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-              <polyline points="16 17 21 12 16 7"/>
-              <line x1="21" y1="12" x2="9" y2="12"/>
-            </svg>
-          </button>
+            {tracks.length > 0 && (
+              <button
+                onClick={async () => {
+                  if (shareCode) { setShareOpen(true); return; }
+                  setShareLoading(true);
+                  try {
+                    const res = await fetch("/api/setlists", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tracks, partyStartMs: partyStart.getTime() }) });
+                    const { code } = await res.json();
+                    setShareCode(code);
+                    setShareUrl(`${window.location.origin}/view/${code}`);
+                    setShareOpen(true);
+                  } finally { setShareLoading(false); }
+                }}
+                disabled={shareLoading}
+                title={shareCode ? "View Share Link" : "Share Setlist"}
+                className={`p-2 rounded-lg transition-colors disabled:opacity-40 ${shareCode ? "text-[#1DB954] hover:bg-zinc-800" : "text-zinc-400 hover:text-white hover:bg-zinc-800"}`}
+              >
+                {shareLoading ? <div className="w-[15px] h-[15px] border border-zinc-400 border-t-transparent rounded-full animate-spin" /> : (
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+                    <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+                  </svg>
+                )}
+              </button>
+            )}
+
+            <div className="w-px h-5 bg-zinc-700 mx-1" />
+
+            <button onClick={() => signOut({ callbackUrl: "/" })} title="Sign Out" className="p-2 rounded-lg text-zinc-600 hover:text-zinc-400 hover:bg-zinc-800 transition-colors">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                <polyline points="16 17 21 12 16 7"/>
+                <line x1="21" y1="12" x2="9" y2="12"/>
+              </svg>
+            </button>
+          </div>
+
+          {/* Mobile overflow menu */}
+          <div className="relative md:hidden">
+            <button
+              onClick={() => setMobileMenuOpen((v) => !v)}
+              className="p-2 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="5" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="12" cy="19" r="1" fill="currentColor"/>
+              </svg>
+            </button>
+            {mobileMenuOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setMobileMenuOpen(false)} />
+                <div className="absolute right-0 top-full mt-1 z-50 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl py-1 min-w-[180px]">
+                  {session?.accessToken && (
+                    <button onClick={() => { setImportOpen(true); setMobileMenuOpen(false); }} className="w-full flex items-center gap-3 px-4 py-3 text-sm text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
+                      </svg>
+                      Import Playlist
+                    </button>
+                  )}
+                  <button onClick={() => { setMySetsOpen(true); setMobileMenuOpen(false); }} className="w-full flex items-center gap-3 px-4 py-3 text-sm text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                    </svg>
+                    My Sets
+                  </button>
+                  {tracks.length > 0 && (
+                    <button onClick={() => { setSaveOpen(true); setMobileMenuOpen(false); }} className="w-full flex items-center gap-3 px-4 py-3 text-sm text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
+                      </svg>
+                      Save Setlist
+                    </button>
+                  )}
+                  {tracks.length > 0 && (
+                    <button
+                      onClick={async () => {
+                        setMobileMenuOpen(false);
+                        if (shareCode) { setShareOpen(true); return; }
+                        setShareLoading(true);
+                        try {
+                          const res = await fetch("/api/setlists", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tracks, partyStartMs: partyStart.getTime() }) });
+                          const { code } = await res.json();
+                          setShareCode(code);
+                          setShareUrl(`${window.location.origin}/view/${code}`);
+                          setShareOpen(true);
+                        } finally { setShareLoading(false); }
+                      }}
+                      className={`w-full flex items-center gap-3 px-4 py-3 text-sm hover:bg-zinc-800 transition-colors ${shareCode ? "text-[#1DB954]" : "text-zinc-300 hover:text-white"}`}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+                        <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+                      </svg>
+                      {shareCode ? "View Share Link" : "Share Setlist"}
+                    </button>
+                  )}
+                  <div className="h-px bg-zinc-800 my-1" />
+                  <button onClick={() => { setMobileMenuOpen(false); signOut({ callbackUrl: "/" }); }} className="w-full flex items-center gap-3 px-4 py-3 text-sm text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                      <polyline points="16 17 21 12 16 7"/>
+                      <line x1="21" y1="12" x2="9" y2="12"/>
+                    </svg>
+                    Sign Out
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </header>
 
@@ -546,80 +593,144 @@ export default function SetlistPage() {
         {tracks.length === 0 ? (
           <div className="flex flex-col items-center justify-center w-full text-zinc-500 gap-3">
             <p className="text-lg">Build your setlist</p>
-            <p className="text-sm text-zinc-600">
+            <p className="text-sm text-zinc-600 text-center px-6">
               Search for songs above, or start playing a playlist in Spotify
             </p>
           </div>
         ) : (
-          <div className="flex flex-1 overflow-hidden">
-            {/* Sidebar */}
-            <div className="w-64 shrink-0 border-r border-zinc-800 overflow-y-auto flex flex-col">
-              <div className="px-3 py-2 text-xs text-zinc-500 uppercase tracking-widest border-b border-zinc-800 flex items-center justify-between">
-                <span>{allTracks.length} song{allTracks.length !== 1 ? "s" : ""}</span>
-                <span className="flex items-center gap-1 text-[#1DB954] text-[10px]">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#1DB954] animate-pulse" />
-                  live
-                </span>
-              </div>
-              {playedTracks.map((track, i) => (
-                <div
-                  key={track.playId ?? "played-" + track.id + "-" + i}
-                  className="flex items-center gap-2 px-3 py-2 border-b border-zinc-800/30 opacity-35"
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="text-zinc-400 text-xs font-medium truncate line-through">{track.name}</p>
-                    <p className="text-zinc-600 text-[10px] truncate">{track.artists.join(", ")}</p>
-                  </div>
+          <>
+            {/* Desktop: sidebar + timeline side-by-side */}
+            <div className="hidden md:flex flex-1 overflow-hidden">
+              <div className="w-64 shrink-0 border-r border-zinc-800 overflow-y-auto flex flex-col">
+                <div className="px-3 py-2 text-xs text-zinc-500 uppercase tracking-widest border-b border-zinc-800 flex items-center justify-between">
+                  <span>{allTracks.length} song{allTracks.length !== 1 ? "s" : ""}</span>
+                  <span className="flex items-center gap-1 text-[#1DB954] text-[10px]">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#1DB954] animate-pulse" />
+                    live
+                  </span>
                 </div>
-              ))}
-              {playedTracks.length > 0 && (
-                <div className="px-3 py-1 text-[9px] text-zinc-600 uppercase tracking-widest bg-zinc-900/60 border-b border-zinc-800">
-                  now playing
-                </div>
-              )}
-              {tracks.map((track, i) => {
-                const isQueued = queuedIds.includes(track.playId);
-                return (
-                  <div
-                    key={track.playId ?? track.id + "-" + i}
-                    className="slide-in-right flex items-center gap-2 px-3 py-2 border-b border-zinc-800/50 group hover:bg-zinc-800/40"
-                    style={{ animationDelay: isQueued ? "0ms" : `${Math.min(i * 20, 300)}ms`, opacity: 0, animationFillMode: "forwards" }}
-                  >
+                {playedTracks.map((track, i) => (
+                  <div key={track.playId ?? "played-" + track.id + "-" + i} className="flex items-center gap-2 px-3 py-2 border-b border-zinc-800/30 opacity-35">
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5">
-                        <p className="text-white text-xs font-medium truncate">{track.name}</p>
-                        {isQueued && (
-                          <span className="shrink-0 text-[9px] font-bold px-1 py-px rounded bg-[#1DB954]/20 text-[#1DB954] uppercase tracking-wide">queued</span>
-                        )}
-                      </div>
-                      <p className="text-zinc-500 text-[10px] truncate">{track.artists.join(", ")}</p>
+                      <p className="text-zinc-400 text-xs font-medium truncate line-through">{track.name}</p>
+                      <p className="text-zinc-600 text-[10px] truncate">{track.artists.join(", ")}</p>
                     </div>
-                    {i > 0 && (
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={() => moveTrack(i, -1)} disabled={i <= 1} className="text-zinc-400 hover:text-white disabled:opacity-20 text-xs px-1">↑</button>
-                        <button onClick={() => moveTrack(i, 1)} disabled={i === tracks.length - 1} className="text-zinc-400 hover:text-white disabled:opacity-20 text-xs px-1">↓</button>
-                        <button onClick={() => removeTrack(i)} className="text-zinc-400 hover:text-red-400 text-xs px-1">✕</button>
-                      </div>
-                    )}
                   </div>
-                );
-              })}
+                ))}
+                {playedTracks.length > 0 && (
+                  <div className="px-3 py-1 text-[9px] text-zinc-600 uppercase tracking-widest bg-zinc-900/60 border-b border-zinc-800">now playing</div>
+                )}
+                {tracks.map((track, i) => {
+                  const isQueued = queuedIds.includes(track.playId);
+                  return (
+                    <div
+                      key={track.playId ?? track.id + "-" + i}
+                      className="slide-in-right flex items-center gap-2 px-3 py-2 border-b border-zinc-800/50 group hover:bg-zinc-800/40"
+                      style={{ animationDelay: isQueued ? "0ms" : `${Math.min(i * 20, 300)}ms`, opacity: 0, animationFillMode: "forwards" }}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-white text-xs font-medium truncate">{track.name}</p>
+                          {isQueued && <span className="shrink-0 text-[9px] font-bold px-1 py-px rounded bg-[#1DB954]/20 text-[#1DB954] uppercase tracking-wide">queued</span>}
+                        </div>
+                        <p className="text-zinc-500 text-[10px] truncate">{track.artists.join(", ")}</p>
+                      </div>
+                      {i > 0 && (
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button onClick={() => moveTrack(i, -1)} disabled={i <= 1} className="text-zinc-400 hover:text-white disabled:opacity-20 text-xs px-1">↑</button>
+                          <button onClick={() => moveTrack(i, 1)} disabled={i === tracks.length - 1} className="text-zinc-400 hover:text-white disabled:opacity-20 text-xs px-1">↓</button>
+                          <button onClick={() => removeTrack(i)} className="text-zinc-400 hover:text-red-400 text-xs px-1">✕</button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="flex-1 overflow-hidden">
+                <Timeline entries={entries} partyStart={setStart} accessToken={session?.accessToken ?? ""} playedCount={playedTracks.length} onReorder={reorderTracks} queuedIds={queuedIds} />
+              </div>
             </div>
 
-            {/* Timeline */}
-            <div className="flex-1 overflow-hidden">
-              <Timeline
-                entries={entries}
-                partyStart={setStart}
-                accessToken={session?.accessToken ?? ""}
-                playedCount={playedTracks.length}
-                onReorder={reorderTracks}
-                queuedIds={queuedIds}
-              />
+            {/* Mobile: single panel, switched by bottom tabs */}
+            <div className="flex md:hidden flex-1 overflow-hidden">
+              {mobileTab === "timeline" ? (
+                <Timeline entries={entries} partyStart={setStart} accessToken={session?.accessToken ?? ""} playedCount={playedTracks.length} onReorder={reorderTracks} queuedIds={queuedIds} compact />
+              ) : (
+                <div className="flex-1 overflow-y-auto flex flex-col">
+                  <div className="px-4 py-3 text-xs text-zinc-500 uppercase tracking-widest border-b border-zinc-800 flex items-center justify-between sticky top-0 bg-zinc-950 z-10">
+                    <span>{allTracks.length} song{allTracks.length !== 1 ? "s" : ""}</span>
+                    <span className="flex items-center gap-1.5 text-[#1DB954] text-[10px]">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#1DB954] animate-pulse" />
+                      live
+                    </span>
+                  </div>
+                  {playedTracks.map((track, i) => (
+                    <div key={track.playId ?? "played-m-" + track.id + "-" + i} className="flex items-center gap-3 px-4 py-3.5 border-b border-zinc-800/30 opacity-35">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-zinc-400 text-sm font-medium truncate line-through">{track.name}</p>
+                        <p className="text-zinc-600 text-xs truncate mt-0.5">{track.artists.join(", ")}</p>
+                      </div>
+                    </div>
+                  ))}
+                  {playedTracks.length > 0 && (
+                    <div className="px-4 py-2 text-[10px] text-zinc-600 uppercase tracking-widest bg-zinc-900/60 border-b border-zinc-800">now playing</div>
+                  )}
+                  {tracks.map((track, i) => {
+                    const isQueued = queuedIds.includes(track.playId);
+                    return (
+                      <div
+                        key={track.playId ?? track.id + "-m-" + i}
+                        className="slide-in-right flex items-center gap-3 px-4 py-3.5 border-b border-zinc-800/50 active:bg-zinc-800/40"
+                        style={{ animationDelay: isQueued ? "0ms" : `${Math.min(i * 20, 300)}ms`, opacity: 0, animationFillMode: "forwards" }}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <p className="text-white text-sm font-medium truncate">{track.name}</p>
+                            {isQueued && <span className="shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#1DB954]/20 text-[#1DB954] uppercase tracking-wide">queued</span>}
+                          </div>
+                          <p className="text-zinc-500 text-xs truncate mt-0.5">{track.artists.join(", ")}</p>
+                        </div>
+                        {i > 0 && (
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button onClick={() => moveTrack(i, -1)} disabled={i <= 1} className="w-8 h-8 flex items-center justify-center rounded-lg text-zinc-400 hover:text-white disabled:opacity-20 active:bg-zinc-700 text-sm">↑</button>
+                            <button onClick={() => moveTrack(i, 1)} disabled={i === tracks.length - 1} className="w-8 h-8 flex items-center justify-center rounded-lg text-zinc-400 hover:text-white disabled:opacity-20 active:bg-zinc-700 text-sm">↓</button>
+                            <button onClick={() => removeTrack(i)} className="w-8 h-8 flex items-center justify-center rounded-lg text-zinc-400 hover:text-red-400 active:bg-zinc-700 text-sm">✕</button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
-          </div>
+          </>
         )}
       </main>
+
+      {/* Mobile bottom tab bar */}
+      <nav className="md:hidden flex border-t border-zinc-800 bg-zinc-950 shrink-0">
+        <button
+          className={`relative flex-1 flex flex-col items-center py-3 gap-1 text-[11px] font-medium transition-colors ${mobileTab === "timeline" ? "text-white" : "text-zinc-500"}`}
+          onClick={() => setMobileTab("timeline")}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+          </svg>
+          <span>Timeline</span>
+          {mobileTab === "timeline" && <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-white rounded-full" />}
+        </button>
+        <button
+          className={`flex-1 flex flex-col items-center py-3 gap-1 text-[11px] font-medium transition-colors relative ${mobileTab === "queue" ? "text-white" : "text-zinc-500"}`}
+          onClick={() => setMobileTab("queue")}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+            <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+          </svg>
+          <span>Queue</span>
+          {mobileTab === "queue" && <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-white rounded-full" />}
+        </button>
+      </nav>
     </div>
   );
 }

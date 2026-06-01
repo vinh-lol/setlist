@@ -2,13 +2,14 @@
 
 interface Props {
   offsetPx: number;
+  timeColWidth?: number;
 }
 
 // Pill is ~44px wide, centered at calc(50% - 36px) within the song column.
 // Left segment stops 6px before the pill left edge; right segment starts 6px after.
 // pill_half=22, gap=6 → left ends at right:calc(50%+64px), right starts at left:calc(50%-8px)
 
-export default function NowIndicator({ offsetPx }: Props) {
+export default function NowIndicator({ offsetPx, timeColWidth = 72 }: Props) {
   if (offsetPx < 0) return null;
 
   return (
@@ -19,7 +20,7 @@ export default function NowIndicator({ offsetPx }: Props) {
       {/* Left line segment: from time column left edge to just before LIVE pill */}
       <div
         className="absolute h-[2px] bg-red-500 -translate-y-px"
-        style={{ left: -72, right: "calc(50% + 64px)", opacity: 0.9, mixBlendMode: "screen" }}
+        style={{ left: -timeColWidth, right: "calc(50% + 64px)", opacity: 0.9, mixBlendMode: "screen" }}
       />
       {/* Right line segment: from just after LIVE pill to right edge */}
       <div

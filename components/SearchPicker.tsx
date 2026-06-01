@@ -84,7 +84,7 @@ export default function SearchPicker({ accessToken, onAdd }: Props) {
             onFocus={() => results.length > 0 && setOpen(true)}
             onBlur={() => setTimeout(() => setOpen(false), 150)}
             placeholder="Search for a song…"
-            className="bg-zinc-800 text-white text-sm px-3 py-2 rounded-lg border border-zinc-700 hover:border-zinc-500 focus:outline-none focus:border-zinc-400 transition-colors w-64"
+            className="bg-zinc-800 text-white text-sm px-3 py-2 rounded-lg border border-zinc-700 hover:border-zinc-500 focus:outline-none focus:border-zinc-400 transition-colors w-36 md:w-64"
           />
           {loading && (
             <div className="absolute right-3 top-1/2 -translate-y-1/2 w-3 h-3 border border-zinc-400 border-t-transparent rounded-full animate-spin" />
@@ -93,7 +93,7 @@ export default function SearchPicker({ accessToken, onAdd }: Props) {
       </div>
 
       {open && results.length > 0 && (
-        <div className="absolute top-full left-0 mt-1 w-96 bg-zinc-900 border border-zinc-700 rounded-lg shadow-2xl z-50 overflow-hidden">
+        <div className="absolute top-full left-0 mt-1 w-[92vw] md:w-96 bg-zinc-900 border border-zinc-700 rounded-lg shadow-2xl z-50 overflow-hidden">
           {results.map((track) => (
             <button
               key={track.id}

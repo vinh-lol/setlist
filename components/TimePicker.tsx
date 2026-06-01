@@ -17,7 +17,7 @@ export default function TimePicker({ value, onChange }: Props) {
 
   return (
     <div className="flex items-center gap-2">
-      <label className="text-zinc-500 text-sm whitespace-nowrap">Party starts</label>
+      <label className="hidden md:inline text-zinc-500 text-sm whitespace-nowrap">Party starts</label>
       <input
         type="time"
         value={timeString}

@@ -15,9 +15,11 @@ interface Props {
   playedCount?: number;
   onReorder?: (fromTrackIdx: number, toTrackIdx: number) => void;
   queuedIds?: string[];
+  compact?: boolean;
 }
 
-export default function Timeline({ entries, partyStart, accessToken, playedCount = 0, onReorder, queuedIds = [] }: Props) {
+export default function Timeline({ entries, partyStart, accessToken, playedCount = 0, onReorder, queuedIds = [], compact = false }: Props) {
+  const timeColWidth = compact ? 56 : 72;
   const songRefs = useRef(entries.map(() => createRef<HTMLDivElement>()));
   const nowPlaying = useCurrentlyPlaying(accessToken);
 
@@ -127,69 +129,50 @@ export default function Timeline({ entries, partyStart, accessToken, playedCount
   return (
     <div className="h-full overflow-y-auto relative">
       <div className="flex" style={{ minHeight: totalPx }}>
-        {/* Time column — z-[30] so timestamps render above the now-bar line */}
-        <div className="w-[72px] shrink-0 relative z-[30]">
-          {entries.map((entry, i) => (
-            <div
-              key={entry.track.playId ?? entry.track.id + i}
-              className="absolute right-2 text-[10px] text-zinc-500 font-mono leading-none"
-              style={{ top: entry.offsetPx + 4 }}
-            >
-              {formatTime(entry.startTime)}
-            </div>
-          ))}
-
-          {/* Playback controls — float in the time column just above the LIVE bar */}
-          {nowPx !== null && (
-            <div
-              className="absolute left-0 right-0 flex items-center justify-center gap-[3px] pointer-events-auto"
-              style={{ top: nowPx - 36, zIndex: 40 }}
-            >
-              {/* Skip previous */}
-              <button
-                onClick={handleSkipPrev}
-                title="Previous"
-                className="w-[18px] h-[18px] flex items-center justify-center rounded text-zinc-300 hover:text-white hover:bg-white/10 transition-colors"
+        {/* Time column — desktop only; hidden on mobile (compact) */}
+        {!compact && (
+          <div className="shrink-0 relative z-[30]" style={{ width: timeColWidth }}>
+            {entries.map((entry, i) => (
+              <div
+                key={entry.track.playId ?? entry.track.id + i}
+                className="absolute right-2 text-[10px] text-zinc-500 font-mono leading-none"
+                style={{ top: entry.offsetPx + 4 }}
               >
-                <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3">
-                  <path d="M3.3 1a.7.7 0 0 1 .7.7v5.15l9.95-5.744a.7.7 0 0 1 1.05.606v12.575a.7.7 0 0 1-1.05.607L4 9.149V13.3a.7.7 0 0 1-.7.7H2.7a.7.7 0 0 1-.7-.7V1.7a.7.7 0 0 1 .7-.7h.6z"/>
-                </svg>
-              </button>
+                {formatTime(entry.startTime)}
+              </div>
+            ))}
 
-              {/* Play / Pause */}
-              <button
-                onClick={handlePlayPause}
-                title={isPlaying ? "Pause" : "Play"}
-                className="w-[22px] h-[22px] flex items-center justify-center rounded-full bg-white/15 hover:bg-white/25 text-white transition-colors"
+            {/* Playback controls — float in the time column just above the LIVE bar */}
+            {nowPx !== null && (
+              <div
+                className="absolute left-0 right-0 flex items-center justify-center gap-[3px] pointer-events-auto"
+                style={{ top: nowPx - 36, zIndex: 40 }}
               >
-                {isPlaying ? (
+                <button onClick={handleSkipPrev} title="Previous" className="w-[18px] h-[18px] flex items-center justify-center rounded text-zinc-300 hover:text-white hover:bg-white/10 transition-colors">
                   <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3">
-                    <path d="M2.7 1a.7.7 0 0 0-.7.7v12.6a.7.7 0 0 0 .7.7h2.6a.7.7 0 0 0 .7-.7V1.7a.7.7 0 0 0-.7-.7H2.7zm8 0a.7.7 0 0 0-.7.7v12.6a.7.7 0 0 0 .7.7h2.6a.7.7 0 0 0 .7-.7V1.7a.7.7 0 0 0-.7-.7h-2.6z"/>
+                    <path d="M3.3 1a.7.7 0 0 1 .7.7v5.15l9.95-5.744a.7.7 0 0 1 1.05.606v12.575a.7.7 0 0 1-1.05.607L4 9.149V13.3a.7.7 0 0 1-.7.7H2.7a.7.7 0 0 1-.7-.7V1.7a.7.7 0 0 1 .7-.7h.6z"/>
                   </svg>
-                ) : (
+                </button>
+                <button onClick={handlePlayPause} title={isPlaying ? "Pause" : "Play"} className="w-[22px] h-[22px] flex items-center justify-center rounded-full bg-white/15 hover:bg-white/25 text-white transition-colors">
+                  {isPlaying ? (
+                    <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3"><path d="M2.7 1a.7.7 0 0 0-.7.7v12.6a.7.7 0 0 0 .7.7h2.6a.7.7 0 0 0 .7-.7V1.7a.7.7 0 0 0-.7-.7H2.7zm8 0a.7.7 0 0 0-.7.7v12.6a.7.7 0 0 0 .7.7h2.6a.7.7 0 0 0 .7-.7V1.7a.7.7 0 0 0-.7-.7h-2.6z"/></svg>
+                  ) : (
+                    <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3"><path d="M3 1.713a.7.7 0 0 1 1.05-.607l10.89 6.288a.7.7 0 0 1 0 1.212L4.05 14.894A.7.7 0 0 1 3 14.288V1.713z"/></svg>
+                  )}
+                </button>
+                <button onClick={handleSkipNext} title="Next" className="w-[18px] h-[18px] flex items-center justify-center rounded text-zinc-300 hover:text-white hover:bg-white/10 transition-colors">
                   <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3">
-                    <path d="M3 1.713a.7.7 0 0 1 1.05-.607l10.89 6.288a.7.7 0 0 1 0 1.212L4.05 14.894A.7.7 0 0 1 3 14.288V1.713z"/>
+                    <path d="M12.7 1a.7.7 0 0 0-.7.7v5.15L2.05 1.107A.7.7 0 0 0 1 1.712v12.575a.7.7 0 0 0 1.05.607L12 9.149V13.3a.7.7 0 0 0 .7.7h.6a.7.7 0 0 0 .7-.7V1.7a.7.7 0 0 0-.7-.7h-.6z"/>
                   </svg>
-                )}
-              </button>
-
-              {/* Skip next */}
-              <button
-                onClick={handleSkipNext}
-                title="Next"
-                className="w-[18px] h-[18px] flex items-center justify-center rounded text-zinc-300 hover:text-white hover:bg-white/10 transition-colors"
-              >
-                <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3">
-                  <path d="M12.7 1a.7.7 0 0 0-.7.7v5.15L2.05 1.107A.7.7 0 0 0 1 1.712v12.575a.7.7 0 0 0 1.05.607L12 9.149V13.3a.7.7 0 0 0 .7.7h.6a.7.7 0 0 0 .7-.7V1.7a.7.7 0 0 0-.7-.7h-.6z"/>
-                </svg>
-              </button>
-            </div>
-          )}
-        </div>
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Song blocks column */}
         <div className="flex-1 relative">
-          {nowPx !== null && <NowIndicator offsetPx={nowPx} />}
+          {nowPx !== null && <NowIndicator offsetPx={nowPx} timeColWidth={compact ? 0 : timeColWidth} />}
 
           {entries.map((entry, i) => {
             const trackIdx = i - playedCount;
@@ -247,6 +230,7 @@ export default function Timeline({ entries, partyStart, accessToken, playedCount
           })}
         </div>
       </div>
+
     </div>
   );
 }
