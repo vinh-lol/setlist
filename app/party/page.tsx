@@ -10,8 +10,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { Anton, Inter } from "next/font/google";
 import dynamic from "next/dynamic";
-import QRCode from "react-qr-code";
-import { getQueue, addToQueue } from "@/lib/spotify";
+import { getQueue } from "@/lib/spotify";
 import { useCurrentlyPlaying } from "@/hooks/useCurrentlyPlaying";
 import { useLyrics } from "@/hooks/useLyrics";
 import { analyzeAlbum, buildTheme, rgba, DEFAULT_THEME, type AlbumTheme } from "@/lib/albumTheme";
@@ -68,8 +67,6 @@ export default function PartyPage() {
   const [queue, setQueue] = useState<SpotifyTrack[]>([]);
   const [positionMs, setPositionMs] = useState(0);
   const [theme, setTheme] = useState<AlbumTheme>(DEFAULT_THEME);
-  const [partyCode, setPartyCode] = useState("");
-  const [requestUrl, setRequestUrl] = useState("");
 
   // Editable dashboard copy
   const [date, setDate] = useState("");
@@ -124,35 +121,6 @@ export default function PartyPage() {
     const id = setInterval(poll, 3_000);
     return () => { active = false; clearInterval(id); };
   }, [token]);
-
-  // Stable party code for the guest "add a song" QR link.
-  useEffect(() => {
-    try {
-      let c = localStorage.getItem("party-code");
-      if (!c) { c = Math.random().toString(36).slice(2, 8).toUpperCase(); localStorage.setItem("party-code", c); }
-      setPartyCode(c);
-      setRequestUrl(`${window.location.origin}/request?p=${c}`);
-    } catch {}
-  }, []);
-
-  // Drain guest requests and add them to Spotify from the host browser.
-  useEffect(() => {
-    if (!token || !partyCode) return;
-    let active = true;
-    const poll = async () => {
-      try {
-        const res = await fetch(`/api/party/${partyCode}`);
-        if (!res.ok) return;
-        const { requests } = await res.json();
-        for (const r of requests ?? []) {
-          if (!active) break;
-          await addToQueue(token, r.id);
-        }
-      } catch {}
-    };
-    const id = setInterval(poll, 3_000);
-    return () => { active = false; clearInterval(id); };
-  }, [token, partyCode]);
 
   // Smooth playback clock
   useEffect(() => {
@@ -354,9 +322,9 @@ export default function PartyPage() {
           <PartyLyrics lines={lyrics.synced} activeIdx={aIdx} positionMs={lyricPos} plain={lyrics.plain} loading={lyrics.loading} accent={theme.accent} faint={rgba(theme.ink, 0.28)} />
         </section>
 
-        {/* RIGHT — album cover + guest QR, in one glass panel */}
+        {/* RIGHT — album cover, centered in a glass panel */}
         <section className="hidden lg:flex flex-col items-center justify-center min-h-0">
-          <GlassPanel className="w-full p-5 flex flex-col items-center gap-5">
+          <GlassPanel className="w-full p-5 flex items-center justify-center">
             {current?.albumArt ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
@@ -367,15 +335,6 @@ export default function PartyPage() {
               />
             ) : (
               <div className="w-full aspect-square bg-[color:var(--ink-05)] rounded-xl" />
-            )}
-            {requestUrl && (
-              <div className="flex items-center justify-center gap-4">
-                <QRCode value={requestUrl} size={64} bgColor="transparent" fgColor={theme.ink} />
-                <div>
-                  <p className="text-sm font-bold uppercase tracking-tight leading-tight">Scan to<br />add a song</p>
-                  <p className="text-[11px] text-[color:var(--ink-40)] tracking-[0.2em] mt-1">{partyCode}</p>
-                </div>
-              </div>
             )}
           </GlassPanel>
         </section>
