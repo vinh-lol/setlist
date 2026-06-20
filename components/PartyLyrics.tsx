@@ -13,8 +13,8 @@ interface Props {
   faint: string;  // ink-derived low-alpha for pending words (legible on dark themes)
 }
 
-const FADE_MASK = "linear-gradient(to bottom, transparent, black 13%, black 90%, transparent)";
-const ANCHOR_FRAC = 0.17; // current line sits near the top; finished lines slide up into the fade
+const FADE_MASK = "linear-gradient(to bottom, transparent, black 4%, black 90%, transparent)";
+const ANCHOR_FRAC = 0.06; // current line sits at the top, aligned with the cover/title
 const AVG_WORD_MS = 330;
 
 function Empty({ children }: { children: React.ReactNode }) {
