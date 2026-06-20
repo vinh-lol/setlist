@@ -74,7 +74,7 @@ export default function PartyLyrics({ lines, activeIdx, positionMs, plain, loadi
               <div
                 key={i}
                 ref={(el) => { lineRefs.current[i] = el; }}
-                className="py-2.5 transition-opacity duration-[420ms] ease-out motion-reduce:transition-none"
+                className="px-6 py-2.5 transition-opacity duration-[420ms] ease-out motion-reduce:transition-none"
                 style={{ opacity: visible ? 1 : 0 }}
               >
                 <p className="uppercase leading-[0.95] tracking-tight text-5xl xl:text-7xl" style={{ fontFamily: "var(--font-lyric)" }}>

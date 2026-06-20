@@ -18,7 +18,9 @@ import { analyzeAlbum, buildTheme, rgba, DEFAULT_THEME, type AlbumTheme } from "
 import { formatDuration } from "@/lib/timeline";
 import type { SpotifyTrack } from "@/lib/types";
 import type { LyricLine } from "@/lib/lyrics";
+import { hexToRgb } from "@/lib/huelix-palette-toolkit";
 import PartyLyrics from "@/components/PartyLyrics";
+import GlassPanel from "@/components/GlassPanel";
 
 const display = Anton({ weight: "400", subsets: ["latin"], variable: "--font-display" });
 const sans = Inter({ subsets: ["latin"], variable: "--font-sans" });
@@ -32,12 +34,20 @@ const K_DATE = "party-date";
 const K_TITLE = "party-title";
 const K_INFO = "party-info";
 
-// Nudge lyrics slightly ahead of the audio — reading lags, so a small lead reads
-// as "in sync." Tune here if it feels early/late.
-const LYRIC_LEAD_MS = 220;
+// Offset applied to lyric timing. 0 = track the (latency-compensated) playback
+// position exactly. Positive = ahead of the audio, negative = behind.
+const LYRIC_LEAD_MS = 0;
 
 function ls(key: string, val: string) {
   try { localStorage.setItem(key, val); } catch {}
+}
+
+// A halo in the tone opposite the ink, so bare text stays legible over the
+// live gradient (light glow under dark text, dark glow under light text).
+function glowFor(hex: string): string {
+  const c = hexToRgb(hex) ?? { r: 0, g: 0, b: 0 };
+  const lum = (0.299 * c.r + 0.587 * c.g + 0.114 * c.b) / 255;
+  return lum > 0.5 ? "rgba(0,0,0,0.55)" : "rgba(255,255,255,0.5)";
 }
 
 function activeLineIdx(lines: LyricLine[] | null, positionMs: number) {
@@ -177,6 +187,8 @@ export default function PartyPage() {
 
   const pct = current ? Math.min(100, (positionMs / current.duration_ms) * 100) : 0;
   const accentShadow = rgba(theme.accent, 0.4);
+  const glow = glowFor(theme.ink);
+  const halo = `0 0 14px ${glow}, 0 0 4px ${glow}`;
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) document.documentElement.requestFullscreen?.();
@@ -211,6 +223,8 @@ export default function PartyPage() {
     "--ink-15": rgba(theme.ink, 0.15),
     "--ink-10": rgba(theme.ink, 0.1),
     "--ink-05": rgba(theme.ink, 0.05),
+    "--glass-tint": rgba(theme.surface, 0.34),
+    "--glass-rim": "rgba(255,255,255,0.22)",
   } as CSSProperties;
 
   return (
@@ -218,15 +232,28 @@ export default function PartyPage() {
       className={`${display.variable} ${sans.variable} relative h-screen w-screen overflow-hidden flex flex-col transition-colors duration-700`}
       style={themeVars}
     >
-      {/* Album-coloured moving gradient + frosted scrim for legibility */}
+      {/* SVG displacement filter that gives the glass panels their liquid edges */}
+      <svg aria-hidden="true" width="0" height="0" className="absolute" style={{ position: "absolute" }}>
+        <defs>
+          <filter id="lgDistort" x="-30%" y="-30%" width="160%" height="160%" colorInterpolationFilters="sRGB">
+            <feTurbulence type="fractalNoise" baseFrequency="0.009 0.013" numOctaves="2" seed="14" result="noise" />
+            <feGaussianBlur in="noise" stdDeviation="1.4" result="noiseB" />
+            <feDisplacementMap in="SourceGraphic" in2="noiseB" scale="34" xChannelSelector="R" yChannelSelector="G" />
+          </filter>
+        </defs>
+      </svg>
+
+      {/* Album-coloured moving gradient (sharp WebGL canvas) ... */}
       {theme.gradient.length > 0 && (
         <>
           <div className="absolute inset-0 z-0">
             <GradientBackground colors={theme.gradient} />
           </div>
+          {/* ... softened by a backdrop blur layer so it recedes into ambience
+              (blurring the canvas via CSS filter would blank it in Chromium). */}
           <div
             className="absolute inset-0 z-0"
-            style={{ background: rgba(theme.surface, 0.32), backdropFilter: "blur(18px)", WebkitBackdropFilter: "blur(18px)" }}
+            style={{ backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", background: rgba(theme.surface, 0.12) }}
           />
         </>
       )}
@@ -247,63 +274,67 @@ export default function PartyPage() {
       {/* Top region: left info · center lyrics · right cover+QR */}
       <div className="relative z-10 flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)_minmax(0,300px)] gap-8 lg:gap-12 px-8 lg:px-10 pt-9 pb-6">
 
-        {/* LEFT — editable header + info + now playing */}
-        <section className="flex flex-col min-h-0">
-          <input
-            value={date}
-            onChange={(e) => saveDate(e.target.value)}
-            placeholder="ADD DATE"
-            spellCheck={false}
-            className={`${editBase} text-xs font-bold uppercase tracking-[0.12em] w-full mb-3`}
-          />
-          <textarea
-            ref={titleRef}
-            value={title}
-            onChange={(e) => saveTitle(e.target.value)}
-            placeholder="PARTY TITLE"
-            spellCheck={false}
-            rows={1}
-            className={`${editBase} uppercase tracking-tight leading-[0.9] text-5xl xl:text-6xl w-full resize-none overflow-hidden`}
-            style={{ fontFamily: "var(--font-display)", color: "var(--primary)" }}
-          />
-
-          <div className="w-10 border-t my-6" style={{ borderColor: "var(--accent)" }} />
-
-          {/* INFO (editable list) */}
-          <div className="text-xs font-bold uppercase tracking-[0.12em] mb-3">Info</div>
-          <div className="space-y-1.5">
-            {info.map((row, i) => (
-              <div key={i} className="group flex items-center gap-2">
-                <input
-                  value={row.label}
-                  onChange={(e) => updateInfo(i, "label", e.target.value)}
-                  placeholder="ITEM"
-                  spellCheck={false}
-                  className={`${editBase} flex-1 min-w-0 text-sm uppercase tracking-wide`}
-                />
-                <input
-                  value={row.time}
-                  onChange={(e) => updateInfo(i, "time", e.target.value)}
-                  placeholder="TIME"
-                  spellCheck={false}
-                  className={`${editBase} w-16 text-sm text-right tabular-nums`}
-                />
-                <button
-                  onClick={() => removeInfo(i)}
-                  className="opacity-0 group-hover:opacity-100 text-[color:var(--ink-30)] hover:text-[color:var(--ink)] text-xs w-4 shrink-0 transition-opacity"
-                  title="Remove"
-                >
-                  ✕
-                </button>
-              </div>
-            ))}
-            <button onClick={addInfo} className="text-xs uppercase tracking-wide text-[color:var(--ink-35)] hover:text-[color:var(--ink)] transition-colors pt-1">
-              + Add item
-            </button>
+        {/* LEFT — bare masthead + info glass + now-playing glass */}
+        <section className="flex flex-col min-h-0 gap-5">
+          <div>
+            <input
+              value={date}
+              onChange={(e) => saveDate(e.target.value)}
+              placeholder="ADD DATE"
+              spellCheck={false}
+              className={`${editBase} text-xs font-bold uppercase tracking-[0.12em] w-full mb-3`}
+              style={{ textShadow: halo }}
+            />
+            <textarea
+              ref={titleRef}
+              value={title}
+              onChange={(e) => saveTitle(e.target.value)}
+              placeholder="PARTY TITLE"
+              spellCheck={false}
+              rows={1}
+              className={`${editBase} uppercase tracking-tight leading-[0.9] text-5xl xl:text-6xl w-full resize-none overflow-hidden`}
+              style={{ fontFamily: "var(--font-display)", color: "var(--primary)", textShadow: halo }}
+            />
+            <div className="w-10 border-t mt-5" style={{ borderColor: "var(--accent)" }} />
           </div>
 
-          {/* NOW PLAYING — pinned to bottom of the left column */}
-          <div className="mt-auto pt-6">
+          {/* INFO (editable list) */}
+          <GlassPanel className="p-5">
+            <div className="text-xs font-bold uppercase tracking-[0.12em] mb-3">Info</div>
+            <div className="space-y-1.5">
+              {info.map((row, i) => (
+                <div key={i} className="group flex items-center gap-2">
+                  <input
+                    value={row.label}
+                    onChange={(e) => updateInfo(i, "label", e.target.value)}
+                    placeholder="ITEM"
+                    spellCheck={false}
+                    className={`${editBase} flex-1 min-w-0 text-sm uppercase tracking-wide`}
+                  />
+                  <input
+                    value={row.time}
+                    onChange={(e) => updateInfo(i, "time", e.target.value)}
+                    placeholder="TIME"
+                    spellCheck={false}
+                    className={`${editBase} w-16 text-sm text-right tabular-nums`}
+                  />
+                  <button
+                    onClick={() => removeInfo(i)}
+                    className="opacity-0 group-hover:opacity-100 text-[color:var(--ink-30)] hover:text-[color:var(--ink)] text-xs w-4 shrink-0 transition-opacity"
+                    title="Remove"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+              <button onClick={addInfo} className="text-xs uppercase tracking-wide text-[color:var(--ink-35)] hover:text-[color:var(--ink)] transition-colors pt-1">
+                + Add item
+              </button>
+            </div>
+          </GlassPanel>
+
+          {/* NOW PLAYING */}
+          <GlassPanel className="mt-auto p-5">
             <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[color:var(--ink-40)] mb-2">Now Playing</p>
             <p className="font-bold uppercase tracking-tight text-xl leading-tight line-clamp-2">{current?.name ?? "Nothing playing"}</p>
             <p className="text-sm text-[color:var(--ink-65)] truncate mt-1">{current?.artists.join(", ") ?? "Start a playlist"}</p>
@@ -315,59 +346,63 @@ export default function PartyPage() {
             <div className="mt-3 h-1 bg-[color:var(--ink-10)] rounded-full overflow-hidden">
               <div className="h-full transition-[width] duration-200 ease-linear" style={{ width: `${pct}%`, background: "var(--accent)" }} />
             </div>
-          </div>
+          </GlassPanel>
         </section>
 
-        {/* CENTER — lyrics, clipped to this column */}
-        <section className="h-full overflow-hidden min-h-[36vh] lg:min-h-0">
+        {/* CENTER — lyrics over the gradient (halo for legibility) */}
+        <section className="h-full overflow-hidden min-h-[36vh] lg:min-h-0" style={{ textShadow: halo }}>
           <PartyLyrics lines={lyrics.synced} activeIdx={aIdx} positionMs={lyricPos} plain={lyrics.plain} loading={lyrics.loading} accent={theme.accent} faint={rgba(theme.ink, 0.28)} />
         </section>
 
-        {/* RIGHT — big album cover + guest "add a song" QR, centered as a group */}
-        <section className="hidden lg:flex flex-col items-center justify-center gap-5 min-h-0">
-          {current?.albumArt ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={current.albumArt}
-              alt={current.albumName}
-              className="w-full aspect-square object-cover rounded-md transition-shadow duration-1000"
-              style={{ boxShadow: `0 32px 64px -30px ${accentShadow}, 0 8px 24px -16px ${rgba(theme.ink, 0.22)}` }}
-            />
-          ) : (
-            <div className="w-full aspect-square bg-[color:var(--ink-05)] rounded-md" />
-          )}
-          {requestUrl && (
-            <div className="flex items-center justify-center gap-4">
-              <QRCode value={requestUrl} size={64} bgColor="transparent" fgColor={theme.ink} />
-              <div>
-                <p className="text-sm font-bold uppercase tracking-tight leading-tight">Scan to<br />add a song</p>
-                <p className="text-[11px] text-[color:var(--ink-40)] tracking-[0.2em] mt-1">{partyCode}</p>
+        {/* RIGHT — album cover + guest QR, in one glass panel */}
+        <section className="hidden lg:flex flex-col items-center justify-center min-h-0">
+          <GlassPanel className="w-full p-5 flex flex-col items-center gap-5">
+            {current?.albumArt ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={current.albumArt}
+                alt={current.albumName}
+                className="w-full aspect-square object-cover rounded-xl transition-shadow duration-1000"
+                style={{ boxShadow: `0 24px 50px -28px ${accentShadow}, 0 6px 18px -14px ${rgba(theme.ink, 0.22)}` }}
+              />
+            ) : (
+              <div className="w-full aspect-square bg-[color:var(--ink-05)] rounded-xl" />
+            )}
+            {requestUrl && (
+              <div className="flex items-center justify-center gap-4">
+                <QRCode value={requestUrl} size={64} bgColor="transparent" fgColor={theme.ink} />
+                <div>
+                  <p className="text-sm font-bold uppercase tracking-tight leading-tight">Scan to<br />add a song</p>
+                  <p className="text-[11px] text-[color:var(--ink-40)] tracking-[0.2em] mt-1">{partyCode}</p>
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </GlassPanel>
         </section>
       </div>
 
-      {/* BOTTOM — up next ticker */}
-      <div className="relative z-10 border-t border-[color:var(--ink-15)] px-8 lg:px-10 py-5 flex items-center gap-8">
-        <div className="flex items-center gap-3 shrink-0 text-sm font-bold uppercase tracking-[0.1em]">
-          Up Next <span className="text-[color:var(--ink-40)]">→</span>
-        </div>
-        <div className="flex-1 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-5">
-          {upcoming.length === 0 && <p className="text-[color:var(--ink-30)] text-sm uppercase tracking-wide">Queue is empty</p>}
-          {upcoming.slice(0, 5).map((track, i) => (
-            <div key={track.playId ?? track.id + "-" + i} className="flex gap-3 items-start min-w-0">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={track.albumArt} alt="" className="w-14 h-14 object-cover rounded-sm shrink-0" />
-              <div className="min-w-0 flex-1">
-                <div className="text-[11px] tabular-nums font-bold" style={{ color: "var(--accent)" }}>{String(i + 1).padStart(2, "0")}</div>
-                <p className="font-bold uppercase tracking-tight text-sm leading-tight truncate">{track.name}</p>
-                <p className="text-[11px] text-[color:var(--ink-50)] uppercase tracking-wide truncate">{track.artists.join(", ")}</p>
-                <p className="text-[11px] text-[color:var(--ink-40)] tabular-nums">{formatDuration(track.duration_ms)}</p>
+      {/* BOTTOM — up next, floating glass bar */}
+      <div className="relative z-10 px-8 lg:px-10 pb-6">
+        <GlassPanel className="px-6 py-4 flex items-center gap-8">
+          <div className="flex items-center gap-3 shrink-0 text-sm font-bold uppercase tracking-[0.1em]">
+            Up Next <span className="text-[color:var(--ink-40)]">→</span>
+          </div>
+          <div className="flex-1 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-5">
+            {upcoming.length === 0 && <p className="text-[color:var(--ink-30)] text-sm uppercase tracking-wide">Queue is empty</p>}
+            {upcoming.slice(0, 5).map((track, i) => (
+              <div key={track.playId ?? track.id + "-" + i} className="flex gap-3 items-start min-w-0">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={track.albumArt} alt="" className="w-14 h-14 object-cover rounded-md shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <div className="text-[11px] tabular-nums font-bold" style={{ color: "var(--accent)" }}>{String(i + 1).padStart(2, "0")}</div>
+                  <p className="font-bold uppercase tracking-tight text-sm leading-tight truncate">{track.name}</p>
+                  <p className="text-[11px] text-[color:var(--ink-50)] uppercase tracking-wide truncate">{track.artists.join(", ")}</p>
+                  <p className="text-[11px] text-[color:var(--ink-40)] tabular-nums">{formatDuration(track.duration_ms)}</p>
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        </GlassPanel>
       </div>
     </div>
   );
