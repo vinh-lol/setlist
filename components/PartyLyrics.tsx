@@ -1,0 +1,110 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import type { LyricLine } from "@/lib/lyrics";
+
+interface Props {
+  lines: LyricLine[] | null;
+  activeIdx: number;
+  positionMs: number;
+  plain: string | null;
+  loading: boolean;
+  accent: string; // album accent for revealed words
+  faint: string;  // ink-derived low-alpha for pending words (legible on dark themes)
+}
+
+const FADE_MASK = "linear-gradient(to bottom, transparent, black 13%, black 90%, transparent)";
+const ANCHOR_FRAC = 0.17; // current line sits near the top; finished lines slide up into the fade
+const AVG_WORD_MS = 330;
+
+function Empty({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="h-full flex items-center opacity-40 text-sm tracking-[0.2em] uppercase" style={{ fontFamily: "var(--font-sans)" }}>
+      {children}
+    </div>
+  );
+}
+
+// Two-line sliding window. Current + next show at the SAME large size; the current
+// line reveals word-by-word (faint → accent). When a line finishes, the stack
+// slides up: the just-played line fades out the top while the next slides into the
+// current slot and a new next fades in below.
+export default function PartyLyrics({ lines, activeIdx, positionMs, plain, loading, accent, faint }: Props) {
+  const vpRef = useRef<HTMLDivElement>(null);
+  const lineRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const [ty, setTy] = useState(0);
+
+  const idx = activeIdx < 0 ? 0 : activeIdx;
+
+  useEffect(() => {
+    const measure = () => {
+      const vp = vpRef.current;
+      const el = lineRefs.current[idx];
+      if (vp && el) setTy(vp.clientHeight * ANCHOR_FRAC - el.offsetTop);
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [idx, lines]);
+
+  if (loading) return <Empty>loading lyrics</Empty>;
+
+  if (lines && lines.length > 0) {
+    const started = activeIdx >= 0;
+    const cur = lines[idx];
+    const nxt = lines[idx + 1] ?? null;
+    const curWords = (cur?.text || "♪").split(/\s+/).filter(Boolean);
+    const gap = nxt ? nxt.timeMs - cur.timeMs : Infinity;
+    const revealDur = Math.max(450, Math.min(gap, curWords.length * AVG_WORD_MS));
+    const frac = !started ? 0 : Math.min(1, Math.max(0, (positionMs - cur.timeMs) / revealDur));
+    const curRevealed = Math.min(curWords.length, Math.ceil(frac * curWords.length));
+
+    return (
+      <div ref={vpRef} className="relative h-full overflow-hidden" style={{ maskImage: FADE_MASK, WebkitMaskImage: FADE_MASK }}>
+        <div
+          className="absolute inset-x-0 top-0 will-change-transform transition-transform duration-[420ms] ease-out motion-reduce:transition-none"
+          style={{ transform: `translateY(${ty}px)` }}
+        >
+          {lines.map((l, i) => {
+            const rel = i - idx;
+            const visible = rel === 0 || rel === 1; // current + next only
+            const words = (l.text || "♪").split(/\s+/).filter(Boolean);
+            const revealed = rel === 0 ? curRevealed : 0;
+            return (
+              <div
+                key={i}
+                ref={(el) => { lineRefs.current[i] = el; }}
+                className="py-2.5 transition-opacity duration-[420ms] ease-out motion-reduce:transition-none"
+                style={{ opacity: visible ? 1 : 0 }}
+              >
+                <p className="uppercase leading-[0.95] tracking-tight text-5xl xl:text-7xl" style={{ fontFamily: "var(--font-lyric)" }}>
+                  {words.map((w, wi) => (
+                    <span
+                      key={wi}
+                      className="inline-block mr-[0.28em] motion-reduce:transition-none"
+                      style={{ color: wi < revealed ? accent : faint, transition: "color 300ms ease-out" }}
+                    >
+                      {w}
+                    </span>
+                  ))}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  if (plain) {
+    return (
+      <div className="h-full overflow-hidden flex items-center opacity-75">
+        <p className="uppercase text-3xl xl:text-5xl leading-snug tracking-tight whitespace-pre-line" style={{ fontFamily: "var(--font-lyric)", overflowWrap: "anywhere" }}>
+          {plain}
+        </p>
+      </div>
+    );
+  }
+
+  return <Empty>no lyrics for this one</Empty>;
+}

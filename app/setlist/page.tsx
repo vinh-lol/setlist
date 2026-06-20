@@ -2,6 +2,7 @@
 
 import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useEffect, useState, useRef, useCallback } from "react";
 import SearchPicker from "@/components/SearchPicker";
 import TimePicker from "@/components/TimePicker";
@@ -450,6 +451,18 @@ export default function SetlistPage() {
             <SearchPicker accessToken={session.accessToken} onAdd={addTrack} />
           )}
           <TimePicker value={partyStart} onChange={setPartyStart} />
+
+          {/* Party mode — always visible, opens the fullscreen dashboard */}
+          <Link
+            href="/party"
+            title="Party Mode (fullscreen dashboard)"
+            className="flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-xs font-bold bg-[#1DB954] text-black hover:bg-[#1ed760] transition-colors shrink-0"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3m13-5v3a2 2 0 0 1-2 2h-3" />
+            </svg>
+            <span className="hidden sm:inline">Party</span>
+          </Link>
 
           {/* Desktop-only action buttons */}
           <div className="hidden md:flex items-center gap-1.5">

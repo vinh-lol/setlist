@@ -203,7 +203,7 @@ export async function skipPrevious(token: string): Promise<void> {
 
 export async function getCurrentlyPlaying(
   token: string
-): Promise<{ trackId: string; progressMs: number; isPlaying: boolean } | null> {
+): Promise<{ trackId: string; progressMs: number; isPlaying: boolean; track: SpotifyTrack | null } | null> {
   const res = await fetch(`${BASE}/me/player/currently-playing`, {
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -211,5 +211,17 @@ export async function getCurrentlyPlaying(
   if (!res.ok) return null;
   const data = await res.json();
   if (!data?.item) return null;
-  return { trackId: data.item.id, progressMs: data.progress_ms ?? 0, isPlaying: data.is_playing ?? false };
+  const t = data.item;
+  const track: SpotifyTrack | null = t.id
+    ? {
+        id: t.id,
+        playId: crypto.randomUUID(),
+        name: t.name,
+        artists: (t.artists ?? []).map((a: { name: string }) => a.name),
+        duration_ms: t.duration_ms ?? 0,
+        albumName: t.album?.name ?? "",
+        albumArt: t.album?.images?.[0]?.url ?? "",
+      }
+    : null;
+  return { trackId: t.id, progressMs: data.progress_ms ?? 0, isPlaying: data.is_playing ?? false, track };
 }
