@@ -77,7 +77,7 @@ export default function PartyLyrics({ lines, activeIdx, positionMs, plain, loadi
                 className="px-6 py-2.5 transition-opacity duration-[420ms] ease-out motion-reduce:transition-none"
                 style={{ opacity: visible ? 1 : 0 }}
               >
-                <p className="uppercase leading-[0.95] tracking-tight text-5xl xl:text-7xl" style={{ fontFamily: "var(--font-lyric)" }}>
+                <p className="uppercase leading-[0.95] tracking-tight text-[clamp(2.25rem,4.6vw,4.5rem)]" style={{ fontFamily: "var(--font-lyric)" }}>
                   {words.map((w, wi) => (
                     <span
                       key={wi}

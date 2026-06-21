@@ -9,6 +9,7 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { Anton, Inter } from "next/font/google";
+import { LayoutGroup, MotionConfig, motion, type Transition } from "framer-motion";
 import dynamic from "next/dynamic";
 import { getQueue, pausePlayback, resumePlayback, skipNext, skipPrevious } from "@/lib/spotify";
 import { useCurrentlyPlaying } from "@/hooks/useCurrentlyPlaying";
@@ -43,6 +44,11 @@ const K_LYRIC_LEAD = "party-lyric-lead";
 // default pulls them back; live-tune with ← / → at the venue (see below).
 const DEFAULT_LYRIC_LEAD_MS = -600;
 const LEAD_STEP_MS = 100;
+
+// Shared spring-ish tween for the layout morph (panels sliding/resizing between
+// the lyrics layout and the hero layout).
+const MORPH: Transition = { duration: 0.55, ease: [0.22, 1, 0.36, 1] };
+const GLASS = "lg-panel lg-distort";
 
 function ls(key: string, val: string) {
   try { localStorage.setItem(key, val); } catch {}
@@ -282,30 +288,31 @@ export default function PartyPage() {
   } as CSSProperties;
 
   // Shared building blocks — reused by both the lyrics layout (3-col) and the
-  // hero layout (no synced lyrics: big cover + player fill the lyrics space).
-  const albumCover = current?.albumArt ? (
+  // hero layout. Player pieces are content-only so they can be packed into
+  // separate bubbles (lyrics) or one long bubble (hero) and morphed between.
+  const albumImg = current?.albumArt ? (
     // eslint-disable-next-line @next/next/no-img-element
     <img
       src={current.albumArt}
       alt={current.albumName}
-      className="w-full aspect-square object-cover rounded-xl transition-shadow duration-1000"
+      className="max-h-full max-w-full w-auto object-contain rounded-xl transition-shadow duration-1000"
       style={{ boxShadow: `0 24px 50px -28px ${accentShadow}, 0 6px 18px -14px ${rgba(theme.ink, 0.22)}` }}
     />
   ) : (
     <div className="w-full aspect-square bg-[color:var(--ink-05)] rounded-xl" />
   );
 
-  const nowPlayingPanel = (
-    <GlassPanel className="p-5">
+  const nowPlayingContent = (
+    <>
       <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[color:var(--ink-40)] mb-2">Now Playing</p>
       <p className="font-bold uppercase tracking-tight text-xl leading-tight line-clamp-2">{current?.name ?? "Nothing playing"}</p>
       <p className="text-sm text-[color:var(--ink-65)] truncate mt-1">{current?.artists.join(", ") ?? "Start a playlist"}</p>
       <p className="text-[11px] text-[color:var(--ink-40)] uppercase tracking-wide truncate mt-0.5">{current?.albumName ?? ""}</p>
-    </GlassPanel>
+    </>
   );
 
-  const transportPanel = (
-    <GlassPanel className="p-5">
+  const transportContent = (
+    <>
       <div className="flex items-center justify-between text-[11px] text-[color:var(--ink-40)] tabular-nums mb-2">
         <span>{formatDuration(Math.min(positionMs, current?.duration_ms ?? 0))}</span>
         <span>{current ? formatDuration(current.duration_ms) : "0:00"}</span>
@@ -328,11 +335,11 @@ export default function PartyPage() {
           <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M4 5.5v13L14.5 12 4 5.5z" /><rect x="16.5" y="5" width="2.5" height="14" rx="1" /></svg>
         </button>
       </div>
-    </GlassPanel>
+    </>
   );
 
   const rightColumn = (
-    <section className="flex flex-col min-h-0 gap-5">
+    <motion.section layout layoutId="rightcol" transition={MORPH} className="flex flex-col min-h-0 gap-5 overflow-hidden">
       <div>
         <input
           value={date}
@@ -399,7 +406,7 @@ export default function PartyPage() {
           )}
         </div>
       </GlassPanel>
-    </section>
+    </motion.section>
   );
 
   return (
@@ -461,41 +468,46 @@ export default function PartyPage() {
         <span style={{ opacity: 0.5 }}> · ← later · → earlier · ↓ reset</span>
       </div>
 
-      {/* Top region — lyrics layout (3-col) vs hero layout (cover + player) */}
-      {showLyrics ? (
-        <div key="lyrics-layout" className="party-layout-in relative z-10 flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)_minmax(0,300px)] gap-8 lg:gap-12 px-8 lg:px-10 pt-9 pb-6">
-          {/* LEFT — cover (top) + now-playing pill + transport pill */}
-          <section className="hidden lg:flex flex-col min-h-0 gap-5">
-            <GlassPanel className="p-5 flex items-center justify-center">{albumCover}</GlassPanel>
-            {nowPlayingPanel}
-            {transportPanel}
-          </section>
+      {/* Top region — lyrics layout (3-col) morphs to/from hero layout (cover +
+          one long player bubble). Framer Motion shared-layout (layoutId) slides
+          and resizes the cover/now-playing/timeline panels between the two. */}
+      <MotionConfig reducedMotion="user">
+        <LayoutGroup>
+          {showLyrics ? (
+            <div key="lyrics-layout" className="relative z-10 flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)_minmax(0,300px)] gap-8 lg:gap-12 px-8 lg:px-10 pt-9 pb-6">
+              {/* LEFT — cover + now-playing bubble + timeline bubble */}
+              <section className="hidden lg:flex flex-col min-h-0 gap-5 overflow-hidden">
+                <motion.div layout layoutId="cover" transition={MORPH} className={`${GLASS} p-5 flex items-center justify-center min-h-0 flex-1`}>{albumImg}</motion.div>
+                <motion.div layout layoutId="np" transition={MORPH} className={`${GLASS} p-5`}>{nowPlayingContent}</motion.div>
+                <motion.div layout layoutId="tp" transition={MORPH} className={`${GLASS} p-5`}>{transportContent}</motion.div>
+              </section>
 
-          {/* CENTER — lyrics over the gradient (halo for legibility) */}
-          <section className="h-full overflow-hidden min-h-[36vh] lg:min-h-0" style={{ textShadow: halo }}>
-            <PartyLyrics lines={lyrics.synced} activeIdx={aIdx} positionMs={lyricPos} plain={lyrics.plain} loading={lyrics.loading} accent={theme.accent} faint={rgba(theme.ink, 0.28)} />
-          </section>
+              {/* CENTER — lyrics over the gradient (halo for legibility) */}
+              <motion.section initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.4 }} className="h-full overflow-hidden min-h-[36vh] lg:min-h-0" style={{ textShadow: halo }}>
+                <PartyLyrics lines={lyrics.synced} activeIdx={aIdx} positionMs={lyricPos} plain={lyrics.plain} loading={lyrics.loading} accent={theme.accent} faint={rgba(theme.ink, 0.28)} />
+              </motion.section>
 
-          {/* RIGHT — editable date + title + info */}
-          {rightColumn}
-        </div>
-      ) : (
-        <div key="hero-layout" className="party-layout-in relative z-10 flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,300px)] gap-8 lg:gap-12 px-8 lg:px-10 pt-9 pb-6">
-          {/* HERO — big cover + player fill the space lyrics would occupy */}
-          <section className="flex flex-col items-center justify-center min-h-0 gap-6">
-            <div className="w-full max-w-[min(46vh,440px)]">
-              <GlassPanel className="p-5 flex items-center justify-center">{albumCover}</GlassPanel>
+              {/* RIGHT — editable date + title + info */}
+              {rightColumn}
             </div>
-            <div className="w-full max-w-md flex flex-col gap-4">
-              {nowPlayingPanel}
-              {transportPanel}
-            </div>
-          </section>
+          ) : (
+            <div key="hero-layout" className="relative z-10 flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,300px)] gap-8 lg:gap-12 px-8 lg:px-10 pt-9 pb-6">
+              {/* HERO — big cover + one long player bubble fill the lyrics space */}
+              <section className="flex flex-col items-center justify-center min-h-0 gap-6 overflow-hidden">
+                <motion.div layout layoutId="cover" transition={MORPH} className={`${GLASS} p-4 flex items-center justify-center w-full max-w-[min(42vh,420px)] max-h-[52vh]`}>{albumImg}</motion.div>
+                {/* one long bubble: now-playing (left) + timeline (right), flush */}
+                <div className="w-full max-w-2xl flex items-stretch">
+                  <motion.div layout layoutId="np" transition={MORPH} className={`${GLASS} p-5 flex-1 flex flex-col justify-center`} style={{ borderTopRightRadius: 0, borderBottomRightRadius: 0 }}>{nowPlayingContent}</motion.div>
+                  <motion.div layout layoutId="tp" transition={MORPH} className={`${GLASS} p-5 flex-1 flex flex-col justify-center`} style={{ borderTopLeftRadius: 0, borderBottomLeftRadius: 0, borderLeft: "none" }}>{transportContent}</motion.div>
+                </div>
+              </section>
 
-          {/* RIGHT — editable date + title + info */}
-          {rightColumn}
-        </div>
-      )}
+              {/* RIGHT — editable date + title + info */}
+              {rightColumn}
+            </div>
+          )}
+        </LayoutGroup>
+      </MotionConfig>
 
       {/* BOTTOM — up next, floating glass bar */}
       <div className="relative z-10 px-8 lg:px-10 pb-6">
