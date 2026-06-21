@@ -13,6 +13,7 @@ import dynamic from "next/dynamic";
 import { getQueue, pausePlayback, resumePlayback, skipNext, skipPrevious } from "@/lib/spotify";
 import { useCurrentlyPlaying } from "@/hooks/useCurrentlyPlaying";
 import { useLyrics } from "@/hooks/useLyrics";
+import { prefetchLyrics } from "@/lib/lyrics";
 import { analyzeAlbum, buildTheme, rgba, DEFAULT_THEME, type AlbumTheme } from "@/lib/albumTheme";
 import { formatDuration } from "@/lib/timeline";
 import type { SpotifyTrack } from "@/lib/types";
@@ -183,6 +184,14 @@ export default function PartyPage() {
   const qIdx = nowPlaying?.trackId ? queue.findIndex((t) => t.id === nowPlaying.trackId) : -1;
   const current: SpotifyTrack | null = nowPlaying?.track ?? queue[Math.max(0, qIdx)] ?? null;
   const upcoming = queue.slice((qIdx >= 0 ? qIdx : 0) + 1);
+
+  // Prefetch lyrics for the next couple of tracks so there's no fetch pause when
+  // the song changes — by then the result is already cached (instant, no flash).
+  const prefetchKey = upcoming.slice(0, 2).map((t) => t.id).join(",");
+  useEffect(() => {
+    upcoming.slice(0, 2).forEach(prefetchLyrics);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefetchKey]);
 
   // Adapt the whole theme to the album cover via the Huelix toolkit.
   useEffect(() => {
@@ -454,7 +463,7 @@ export default function PartyPage() {
 
       {/* Top region — lyrics layout (3-col) vs hero layout (cover + player) */}
       {showLyrics ? (
-        <div className="relative z-10 flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)_minmax(0,300px)] gap-8 lg:gap-12 px-8 lg:px-10 pt-9 pb-6">
+        <div key="lyrics-layout" className="party-layout-in relative z-10 flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)_minmax(0,300px)] gap-8 lg:gap-12 px-8 lg:px-10 pt-9 pb-6">
           {/* LEFT — cover (top) + now-playing pill + transport pill */}
           <section className="hidden lg:flex flex-col min-h-0 gap-5">
             <GlassPanel className="p-5 flex items-center justify-center">{albumCover}</GlassPanel>
@@ -471,7 +480,7 @@ export default function PartyPage() {
           {rightColumn}
         </div>
       ) : (
-        <div className="relative z-10 flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,300px)] gap-8 lg:gap-12 px-8 lg:px-10 pt-9 pb-6">
+        <div key="hero-layout" className="party-layout-in relative z-10 flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,300px)] gap-8 lg:gap-12 px-8 lg:px-10 pt-9 pb-6">
           {/* HERO — big cover + player fill the space lyrics would occupy */}
           <section className="flex flex-col items-center justify-center min-h-0 gap-6">
             <div className="w-full max-w-[min(46vh,440px)]">
@@ -499,7 +508,7 @@ export default function PartyPage() {
             {upcoming.slice(0, maxUpNext).map((track, i) => (
               <div key={track.playId ?? track.id + "-" + i} className="flex gap-3 items-start min-w-0">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={track.albumArt} alt="" className={`${showLyrics ? "w-14 h-14" : "w-16 h-16"} object-cover rounded-md shrink-0`} />
+                <img src={track.albumArt} alt="" className={`${showLyrics ? "w-14 h-14" : "w-16 h-16"} object-cover rounded-md shrink-0 transition-all duration-300`} />
                 <div className="min-w-0 flex-1">
                   <div className="text-[11px] tabular-nums font-bold" style={{ color: "var(--accent)" }}>{String(i + 1).padStart(2, "0")}</div>
                   <p className="font-bold uppercase tracking-tight text-sm leading-tight truncate">{track.name}</p>

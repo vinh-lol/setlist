@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { parseLrc, type LyricLine } from "@/lib/lyrics";
+import { fetchLyrics, getCachedLyrics, lyricsKey } from "@/lib/lyrics";
+import type { LyricLine } from "@/lib/lyrics";
 import type { SpotifyTrack } from "@/lib/types";
 
 export interface LyricsData {
@@ -12,42 +13,31 @@ export interface LyricsData {
 
 const EMPTY: LyricsData = { synced: null, plain: null, loading: false };
 
-// Fetches lyrics for the given track from our /api/lyrics proxy and parses any
-// synced LRC into timestamped lines. Re-fetches whenever the track changes.
+// Returns lyrics for the given track. Reads the shared cache synchronously when
+// the track was prefetched (no loading flash / layout flicker); otherwise
+// fetches and flips loading. Prefetching upcoming tracks happens in /party.
 export function useLyrics(track: SpotifyTrack | null): LyricsData {
-  const [data, setData] = useState<LyricsData>(EMPTY);
-
-  const key = track ? `${track.name}|${track.artists[0] ?? ""}` : "";
+  const key = track ? lyricsKey(track) : "";
+  const [data, setData] = useState<LyricsData>(() => {
+    const cached = track ? getCachedLyrics(track) : null;
+    return cached ? { ...cached, loading: false } : EMPTY;
+  });
 
   useEffect(() => {
     if (!track) {
       setData(EMPTY);
       return;
     }
+    const cached = getCachedLyrics(track);
+    if (cached) {
+      setData({ ...cached, loading: false });
+      return;
+    }
     let active = true;
     setData((d) => ({ ...d, loading: true }));
-
-    const params = new URLSearchParams({
-      track: track.name,
-      artist: track.artists[0] ?? "",
-      album: track.albumName ?? "",
-      duration: String(Math.round(track.duration_ms / 1000)),
+    fetchLyrics(track).then((res) => {
+      if (active) setData({ ...res, loading: false });
     });
-
-    fetch(`/api/lyrics?${params}`)
-      .then((r) => r.json())
-      .then((j: { synced: string | null; plain: string | null }) => {
-        if (!active) return;
-        setData({
-          synced: j.synced ? parseLrc(j.synced) : null,
-          plain: j.plain ?? null,
-          loading: false,
-        });
-      })
-      .catch(() => {
-        if (active) setData(EMPTY);
-      });
-
     return () => {
       active = false;
     };
