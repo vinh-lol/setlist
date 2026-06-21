@@ -194,9 +194,29 @@ export default function PartyPage() {
     return () => { active = false; };
   }, [current?.albumArt]);
 
+  // Mirror the album colors onto a Govee light via /api/govee. Fires once per
+  // palette change (≈ per song); no-ops silently when Govee isn't configured
+  // server-side or the call fails, so it never disturbs the dashboard.
+  const goveeKey = `${theme.gradient.join(",")}|${theme.accent}`;
+  useEffect(() => {
+    if (!theme.gradient.length) return;
+    fetch("/api/govee", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ colors: theme.gradient, accent: theme.accent }),
+    }).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [goveeKey]);
+
   const lyrics = useLyrics(current);
   const lyricPos = positionMs + lyricLead;
   const aIdx = activeLineIdx(lyrics.synced, lyricPos);
+
+  // Only time-synced lyrics drive the center column. Plain-only or truly-absent
+  // lyrics fall back to the hero layout (big cover + player, enlarged queue).
+  const hasSynced = (lyrics.synced?.length ?? 0) > 0;
+  const showLyrics = lyrics.loading || hasSynced;
+  const maxUpNext = showLyrics ? 5 : 6;
 
   const pct = current ? Math.min(100, (positionMs / current.duration_ms) * 100) : 0;
   const accentShadow = rgba(theme.accent, 0.4);
@@ -251,6 +271,127 @@ export default function PartyPage() {
     "--glass-tint": rgba(theme.surface, 0.34),
     "--glass-rim": "rgba(255,255,255,0.22)",
   } as CSSProperties;
+
+  // Shared building blocks — reused by both the lyrics layout (3-col) and the
+  // hero layout (no synced lyrics: big cover + player fill the lyrics space).
+  const albumCover = current?.albumArt ? (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={current.albumArt}
+      alt={current.albumName}
+      className="w-full aspect-square object-cover rounded-xl transition-shadow duration-1000"
+      style={{ boxShadow: `0 24px 50px -28px ${accentShadow}, 0 6px 18px -14px ${rgba(theme.ink, 0.22)}` }}
+    />
+  ) : (
+    <div className="w-full aspect-square bg-[color:var(--ink-05)] rounded-xl" />
+  );
+
+  const nowPlayingPanel = (
+    <GlassPanel className="p-5">
+      <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[color:var(--ink-40)] mb-2">Now Playing</p>
+      <p className="font-bold uppercase tracking-tight text-xl leading-tight line-clamp-2">{current?.name ?? "Nothing playing"}</p>
+      <p className="text-sm text-[color:var(--ink-65)] truncate mt-1">{current?.artists.join(", ") ?? "Start a playlist"}</p>
+      <p className="text-[11px] text-[color:var(--ink-40)] uppercase tracking-wide truncate mt-0.5">{current?.albumName ?? ""}</p>
+    </GlassPanel>
+  );
+
+  const transportPanel = (
+    <GlassPanel className="p-5">
+      <div className="flex items-center justify-between text-[11px] text-[color:var(--ink-40)] tabular-nums mb-2">
+        <span>{formatDuration(Math.min(positionMs, current?.duration_ms ?? 0))}</span>
+        <span>{current ? formatDuration(current.duration_ms) : "0:00"}</span>
+      </div>
+      <div className="h-1 bg-[color:var(--ink-10)] rounded-full overflow-hidden">
+        <div className="h-full transition-[width] duration-200 ease-linear" style={{ width: `${pct}%`, background: "var(--accent)" }} />
+      </div>
+      <div className="flex items-center justify-center gap-8 mt-4">
+        <button onClick={handlePrev} title="Previous" className="text-[color:var(--ink-65)] hover:text-[color:var(--ink)] transition-colors">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="2.5" height="14" rx="1" /><path d="M20 5.5v13L9.5 12 20 5.5z" /></svg>
+        </button>
+        <button onClick={handlePlayPause} title={playing ? "Pause" : "Play"} className="hover:opacity-80 transition-opacity" style={{ color: "var(--accent)" }}>
+          {playing ? (
+            <svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor"><rect x="6.5" y="5" width="3.5" height="14" rx="1" /><rect x="14" y="5" width="3.5" height="14" rx="1" /></svg>
+          ) : (
+            <svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5.5v13L19 12 7 5.5z" /></svg>
+          )}
+        </button>
+        <button onClick={handleNext} title="Next" className="text-[color:var(--ink-65)] hover:text-[color:var(--ink)] transition-colors">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M4 5.5v13L14.5 12 4 5.5z" /><rect x="16.5" y="5" width="2.5" height="14" rx="1" /></svg>
+        </button>
+      </div>
+    </GlassPanel>
+  );
+
+  const rightColumn = (
+    <section className="flex flex-col min-h-0 gap-5">
+      <div>
+        <input
+          value={date}
+          onChange={(e) => saveDate(e.target.value)}
+          placeholder="ADD DATE"
+          spellCheck={false}
+          className={`${editBase} text-xs font-bold uppercase tracking-[0.12em] w-full mb-2 px-2 py-1`}
+          style={{ textShadow: halo }}
+        />
+        <textarea
+          ref={titleRef}
+          value={title}
+          onChange={(e) => saveTitle(e.target.value)}
+          placeholder="PARTY TITLE"
+          spellCheck={false}
+          rows={1}
+          className={`${editBase} font-black uppercase tracking-tight leading-[0.95] break-words text-5xl xl:text-6xl w-full resize-none overflow-hidden px-2 py-2`}
+          style={{ fontFamily: "var(--font-sans)", color: "var(--primary)", textShadow: halo }}
+        />
+        <div className="w-10 border-t mt-5" style={{ borderColor: "var(--accent)" }} />
+      </div>
+
+      {/* INFO (editable list) */}
+      <GlassPanel className="p-5">
+        <div className="text-xs font-bold uppercase tracking-[0.12em] mb-3">Info</div>
+        <div className="space-y-1.5">
+          {info.map((row, i) => {
+            // In fullscreen, hide fully-empty rows (editing-only placeholders).
+            if (isFullscreen && !row.label.trim() && !row.time.trim()) return null;
+            return (
+              <div key={i} className="group flex items-center gap-2">
+                <input
+                  value={row.label}
+                  onChange={(e) => updateInfo(i, "label", e.target.value)}
+                  placeholder="ITEM"
+                  spellCheck={false}
+                  className={`${editBase} flex-1 min-w-0 text-sm uppercase tracking-wide`}
+                />
+                {(!isFullscreen || row.time.trim()) && (
+                  <input
+                    value={row.time}
+                    onChange={(e) => updateInfo(i, "time", e.target.value)}
+                    placeholder="TIME"
+                    spellCheck={false}
+                    className={`${editBase} w-16 text-sm text-right tabular-nums`}
+                  />
+                )}
+                {!isFullscreen && (
+                  <button
+                    onClick={() => removeInfo(i)}
+                    className="opacity-0 group-hover:opacity-100 text-[color:var(--ink-30)] hover:text-[color:var(--ink)] text-xs w-4 shrink-0 transition-opacity"
+                    title="Remove"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            );
+          })}
+          {!isFullscreen && (
+            <button onClick={addInfo} className="text-xs uppercase tracking-wide text-[color:var(--ink-35)] hover:text-[color:var(--ink)] transition-colors pt-1">
+              + Add item
+            </button>
+          )}
+        </div>
+      </GlassPanel>
+    </section>
+  );
 
   return (
     <div
@@ -311,135 +452,41 @@ export default function PartyPage() {
         <span style={{ opacity: 0.5 }}> · ← later · → earlier · ↓ reset</span>
       </div>
 
-      {/* Top region: left info · center lyrics · right cover+QR */}
-      <div className="relative z-10 flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)_minmax(0,300px)] gap-8 lg:gap-12 px-8 lg:px-10 pt-9 pb-6">
+      {/* Top region — lyrics layout (3-col) vs hero layout (cover + player) */}
+      {showLyrics ? (
+        <div className="relative z-10 flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)_minmax(0,300px)] gap-8 lg:gap-12 px-8 lg:px-10 pt-9 pb-6">
+          {/* LEFT — cover (top) + now-playing pill + transport pill */}
+          <section className="hidden lg:flex flex-col min-h-0 gap-5">
+            <GlassPanel className="p-5 flex items-center justify-center">{albumCover}</GlassPanel>
+            {nowPlayingPanel}
+            {transportPanel}
+          </section>
 
-        {/* LEFT — cover (top) + now-playing pill + transport pill */}
-        <section className="hidden lg:flex flex-col min-h-0 gap-5">
-          <GlassPanel className="p-5 flex items-center justify-center">
-            {current?.albumArt ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={current.albumArt}
-                alt={current.albumName}
-                className="w-full aspect-square object-cover rounded-xl transition-shadow duration-1000"
-                style={{ boxShadow: `0 24px 50px -28px ${accentShadow}, 0 6px 18px -14px ${rgba(theme.ink, 0.22)}` }}
-              />
-            ) : (
-              <div className="w-full aspect-square bg-[color:var(--ink-05)] rounded-xl" />
-            )}
-          </GlassPanel>
+          {/* CENTER — lyrics over the gradient (halo for legibility) */}
+          <section className="h-full overflow-hidden min-h-[36vh] lg:min-h-0" style={{ textShadow: halo }}>
+            <PartyLyrics lines={lyrics.synced} activeIdx={aIdx} positionMs={lyricPos} plain={lyrics.plain} loading={lyrics.loading} accent={theme.accent} faint={rgba(theme.ink, 0.28)} />
+          </section>
 
-          {/* NOW PLAYING — song info */}
-          <GlassPanel className="p-5">
-            <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[color:var(--ink-40)] mb-2">Now Playing</p>
-            <p className="font-bold uppercase tracking-tight text-xl leading-tight line-clamp-2">{current?.name ?? "Nothing playing"}</p>
-            <p className="text-sm text-[color:var(--ink-65)] truncate mt-1">{current?.artists.join(", ") ?? "Start a playlist"}</p>
-            <p className="text-[11px] text-[color:var(--ink-40)] uppercase tracking-wide truncate mt-0.5">{current?.albumName ?? ""}</p>
-          </GlassPanel>
-
-          {/* TRANSPORT — progress + controls */}
-          <GlassPanel className="p-5">
-            <div className="flex items-center justify-between text-[11px] text-[color:var(--ink-40)] tabular-nums mb-2">
-              <span>{formatDuration(Math.min(positionMs, current?.duration_ms ?? 0))}</span>
-              <span>{current ? formatDuration(current.duration_ms) : "0:00"}</span>
+          {/* RIGHT — editable date + title + info */}
+          {rightColumn}
+        </div>
+      ) : (
+        <div className="relative z-10 flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,300px)] gap-8 lg:gap-12 px-8 lg:px-10 pt-9 pb-6">
+          {/* HERO — big cover + player fill the space lyrics would occupy */}
+          <section className="flex flex-col items-center justify-center min-h-0 gap-6">
+            <div className="w-full max-w-[min(46vh,440px)]">
+              <GlassPanel className="p-5 flex items-center justify-center">{albumCover}</GlassPanel>
             </div>
-            <div className="h-1 bg-[color:var(--ink-10)] rounded-full overflow-hidden">
-              <div className="h-full transition-[width] duration-200 ease-linear" style={{ width: `${pct}%`, background: "var(--accent)" }} />
+            <div className="w-full max-w-md flex flex-col gap-4">
+              {nowPlayingPanel}
+              {transportPanel}
             </div>
-            <div className="flex items-center justify-center gap-8 mt-4">
-              <button onClick={handlePrev} title="Previous" className="text-[color:var(--ink-65)] hover:text-[color:var(--ink)] transition-colors">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="2.5" height="14" rx="1" /><path d="M20 5.5v13L9.5 12 20 5.5z" /></svg>
-              </button>
-              <button onClick={handlePlayPause} title={playing ? "Pause" : "Play"} className="hover:opacity-80 transition-opacity" style={{ color: "var(--accent)" }}>
-                {playing ? (
-                  <svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor"><rect x="6.5" y="5" width="3.5" height="14" rx="1" /><rect x="14" y="5" width="3.5" height="14" rx="1" /></svg>
-                ) : (
-                  <svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5.5v13L19 12 7 5.5z" /></svg>
-                )}
-              </button>
-              <button onClick={handleNext} title="Next" className="text-[color:var(--ink-65)] hover:text-[color:var(--ink)] transition-colors">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M4 5.5v13L14.5 12 4 5.5z" /><rect x="16.5" y="5" width="2.5" height="14" rx="1" /></svg>
-              </button>
-            </div>
-          </GlassPanel>
-        </section>
+          </section>
 
-        {/* CENTER — lyrics over the gradient (halo for legibility) */}
-        <section className="h-full overflow-hidden min-h-[36vh] lg:min-h-0" style={{ textShadow: halo }}>
-          <PartyLyrics lines={lyrics.synced} activeIdx={aIdx} positionMs={lyricPos} plain={lyrics.plain} loading={lyrics.loading} accent={theme.accent} faint={rgba(theme.ink, 0.28)} />
-        </section>
-
-        {/* RIGHT — editable date + title + info */}
-        <section className="flex flex-col min-h-0 gap-5">
-          <div>
-            <input
-              value={date}
-              onChange={(e) => saveDate(e.target.value)}
-              placeholder="ADD DATE"
-              spellCheck={false}
-              className={`${editBase} text-xs font-bold uppercase tracking-[0.12em] w-full mb-2 px-2 py-1`}
-              style={{ textShadow: halo }}
-            />
-            <textarea
-              ref={titleRef}
-              value={title}
-              onChange={(e) => saveTitle(e.target.value)}
-              placeholder="PARTY TITLE"
-              spellCheck={false}
-              rows={1}
-              className={`${editBase} font-black uppercase tracking-tight leading-[0.95] break-words text-5xl xl:text-6xl w-full resize-none overflow-hidden px-2 py-2`}
-              style={{ fontFamily: "var(--font-sans)", color: "var(--primary)", textShadow: halo }}
-            />
-            <div className="w-10 border-t mt-5" style={{ borderColor: "var(--accent)" }} />
-          </div>
-
-          {/* INFO (editable list) */}
-          <GlassPanel className="p-5">
-            <div className="text-xs font-bold uppercase tracking-[0.12em] mb-3">Info</div>
-            <div className="space-y-1.5">
-              {info.map((row, i) => {
-                // In fullscreen, hide fully-empty rows (editing-only placeholders).
-                if (isFullscreen && !row.label.trim() && !row.time.trim()) return null;
-                return (
-                  <div key={i} className="group flex items-center gap-2">
-                    <input
-                      value={row.label}
-                      onChange={(e) => updateInfo(i, "label", e.target.value)}
-                      placeholder="ITEM"
-                      spellCheck={false}
-                      className={`${editBase} flex-1 min-w-0 text-sm uppercase tracking-wide`}
-                    />
-                    {(!isFullscreen || row.time.trim()) && (
-                      <input
-                        value={row.time}
-                        onChange={(e) => updateInfo(i, "time", e.target.value)}
-                        placeholder="TIME"
-                        spellCheck={false}
-                        className={`${editBase} w-16 text-sm text-right tabular-nums`}
-                      />
-                    )}
-                    {!isFullscreen && (
-                      <button
-                        onClick={() => removeInfo(i)}
-                        className="opacity-0 group-hover:opacity-100 text-[color:var(--ink-30)] hover:text-[color:var(--ink)] text-xs w-4 shrink-0 transition-opacity"
-                        title="Remove"
-                      >
-                        ✕
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
-              {!isFullscreen && (
-                <button onClick={addInfo} className="text-xs uppercase tracking-wide text-[color:var(--ink-35)] hover:text-[color:var(--ink)] transition-colors pt-1">
-                  + Add item
-                </button>
-              )}
-            </div>
-          </GlassPanel>
-        </section>
-      </div>
+          {/* RIGHT — editable date + title + info */}
+          {rightColumn}
+        </div>
+      )}
 
       {/* BOTTOM — up next, floating glass bar */}
       <div className="relative z-10 px-8 lg:px-10 pb-6">
@@ -447,12 +494,12 @@ export default function PartyPage() {
           <div className="flex items-center gap-3 shrink-0 text-sm font-bold uppercase tracking-[0.1em]">
             Up Next <span className="text-[color:var(--ink-40)]">→</span>
           </div>
-          <div className="flex-1 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-5">
+          <div className={`flex-1 grid grid-cols-2 md:grid-cols-3 gap-5 ${showLyrics ? "lg:grid-cols-5" : "lg:grid-cols-6"}`}>
             {upcoming.length === 0 && <p className="text-[color:var(--ink-30)] text-sm uppercase tracking-wide">Queue is empty</p>}
-            {upcoming.slice(0, 5).map((track, i) => (
+            {upcoming.slice(0, maxUpNext).map((track, i) => (
               <div key={track.playId ?? track.id + "-" + i} className="flex gap-3 items-start min-w-0">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={track.albumArt} alt="" className="w-14 h-14 object-cover rounded-md shrink-0" />
+                <img src={track.albumArt} alt="" className={`${showLyrics ? "w-14 h-14" : "w-16 h-16"} object-cover rounded-md shrink-0`} />
                 <div className="min-w-0 flex-1">
                   <div className="text-[11px] tabular-nums font-bold" style={{ color: "var(--accent)" }}>{String(i + 1).padStart(2, "0")}</div>
                   <p className="font-bold uppercase tracking-tight text-sm leading-tight truncate">{track.name}</p>
