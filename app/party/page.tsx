@@ -32,10 +32,16 @@ interface InfoItem { label: string; time: string; }
 const K_DATE = "party-date";
 const K_TITLE = "party-title";
 const K_INFO = "party-info";
+const K_LYRIC_LEAD = "party-lyric-lead";
 
-// Offset applied to lyric timing. 0 = track the (latency-compensated) playback
-// position exactly. Positive = ahead of the audio, negative = behind.
-const LYRIC_LEAD_MS = 0;
+// Offset applied to lyric timing, in ms. 0 = track the (latency-compensated)
+// playback position exactly. Positive = lyrics run ahead of the audio, negative
+// = lyrics run behind. Spotify reports the *stream* position, but on a TV / BT
+// speaker / Spotify Connect target the sound you actually hear lags that by the
+// device's output + buffering latency — so the lyrics drift ahead. A negative
+// default pulls them back; live-tune with ← / → at the venue (see below).
+const DEFAULT_LYRIC_LEAD_MS = -600;
+const LEAD_STEP_MS = 100;
 
 function ls(key: string, val: string) {
   try { localStorage.setItem(key, val); } catch {}
@@ -77,6 +83,12 @@ export default function PartyPage() {
 
   const [isFullscreen, setIsFullscreen] = useState(false);
 
+  // Live-tunable lyric timing offset (ms). Persisted so a dialled-in venue
+  // setting survives reloads. `leadToast` briefly shows the value while nudging.
+  const [lyricLead, setLyricLead] = useState(DEFAULT_LYRIC_LEAD_MS);
+  const [leadToast, setLeadToast] = useState(false);
+  const leadToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const nowPlaying = useCurrentlyPlaying(token);
   const anchorRef = useRef<{ at: number; progress: number; playing: boolean } | null>(null);
   if (nowPlaying) anchorRef.current = { at: nowPlaying.fetchedAt, progress: nowPlaying.progressMs, playing: nowPlaying.isPlaying };
@@ -92,10 +104,35 @@ export default function PartyPage() {
       setTitle(localStorage.getItem(K_TITLE) ?? localStorage.getItem("party-custom-text") ?? "");
       const raw = localStorage.getItem(K_INFO);
       setInfo(raw ? JSON.parse(raw) : [{ label: "", time: "" }]);
+      const lead = localStorage.getItem(K_LYRIC_LEAD);
+      if (lead !== null && !Number.isNaN(Number(lead))) setLyricLead(Number(lead));
     } catch {
       setInfo([{ label: "", time: "" }]);
     }
   }, []);
+
+  // Live lyric-sync nudge: ← pulls lyrics later (more behind the audio), →
+  // pushes them earlier. ↓/0 resets. Lets you dial out TV/speaker output lag at
+  // the venue without a redeploy. Ignored while editing a text field.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+      let next: number | null = null;
+      if (e.key === "ArrowLeft") next = lyricLead - LEAD_STEP_MS;
+      else if (e.key === "ArrowRight") next = lyricLead + LEAD_STEP_MS;
+      else if (e.key === "ArrowDown" || e.key === "0") next = 0;
+      if (next === null) return;
+      e.preventDefault();
+      setLyricLead(next);
+      ls(K_LYRIC_LEAD, String(next));
+      setLeadToast(true);
+      if (leadToastTimer.current) clearTimeout(leadToastTimer.current);
+      leadToastTimer.current = setTimeout(() => setLeadToast(false), 1600);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [lyricLead]);
 
   // Auto-grow the title textarea to fit its wrapped lines. Re-measure after web
   // fonts load (otherwise the height is measured with the fallback font and the
@@ -158,7 +195,7 @@ export default function PartyPage() {
   }, [current?.albumArt]);
 
   const lyrics = useLyrics(current);
-  const lyricPos = positionMs + LYRIC_LEAD_MS;
+  const lyricPos = positionMs + lyricLead;
   const aIdx = activeLineIdx(lyrics.synced, lyricPos);
 
   const pct = current ? Math.min(100, (positionMs / current.duration_ms) * 100) : 0;
@@ -258,6 +295,21 @@ export default function PartyPage() {
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3m13-5v3a2 2 0 0 1-2 2h-3" /></svg>
         )}
       </button>
+
+      {/* Lyric-sync nudge readout — fades in while adjusting with ← / → (↓ resets) */}
+      <div
+        className="absolute top-4 left-1/2 -translate-x-1/2 z-30 px-3 py-1.5 rounded-full text-xs tracking-[0.18em] uppercase pointer-events-none transition-opacity duration-300"
+        style={{
+          opacity: leadToast ? 1 : 0,
+          background: rgba(theme.ink, 0.08),
+          color: rgba(theme.ink, 0.75),
+          backdropFilter: "blur(8px)",
+          WebkitBackdropFilter: "blur(8px)",
+        }}
+      >
+        Lyrics {lyricLead === 0 ? "in sync" : `${lyricLead > 0 ? "+" : ""}${(lyricLead / 1000).toFixed(1)}s`}
+        <span style={{ opacity: 0.5 }}> · ← later · → earlier · ↓ reset</span>
+      </div>
 
       {/* Top region: left info · center lyrics · right cover+QR */}
       <div className="relative z-10 flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)_minmax(0,300px)] gap-8 lg:gap-12 px-8 lg:px-10 pt-9 pb-6">
