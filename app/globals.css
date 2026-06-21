@@ -82,6 +82,11 @@ html, body {
   -webkit-backdrop-filter: blur(12px) saturate(180%) url(#lgDistort);
   backdrop-filter: blur(12px) saturate(180%) url(#lgDistort);
 }
+/* Fused-bubble pieces (hero): suppress the per-panel sheen so it doesn't bloom
+   at internal junctions — only the bubble's outer corner piece keeps its sheen. */
+.lg-panel.lg-flat::after {
+  content: none;
+}
 /* Specular sheen sweeping the top edge. */
 .lg-panel::after {
   content: "";

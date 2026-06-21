@@ -302,41 +302,47 @@ export default function PartyPage() {
     <div className="w-full aspect-square bg-[color:var(--ink-05)] rounded-xl" />
   );
 
-  const nowPlayingContent = (
+  // `big` scales the player copy/controls up for the hero (no-lyric) bubble,
+  // where there's far more room than in the lyrics layout's slim left column.
+  const renderNowPlaying = (big = false) => (
     <>
-      <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[color:var(--ink-40)] mb-2">Now Playing</p>
-      <p className="font-bold uppercase tracking-tight text-xl leading-tight line-clamp-2">{current?.name ?? "Nothing playing"}</p>
-      <p className="text-sm text-[color:var(--ink-65)] truncate mt-1">{current?.artists.join(", ") ?? "Start a playlist"}</p>
-      <p className="text-[11px] text-[color:var(--ink-40)] uppercase tracking-wide truncate mt-0.5">{current?.albumName ?? ""}</p>
+      <p className={`font-bold uppercase tracking-[0.12em] text-[color:var(--ink-40)] ${big ? "text-sm mb-3" : "text-[11px] mb-2"}`}>Now Playing</p>
+      <p className={`font-bold uppercase tracking-tight leading-tight line-clamp-2 ${big ? "text-4xl xl:text-5xl" : "text-xl"}`}>{current?.name ?? "Nothing playing"}</p>
+      <p className={`text-[color:var(--ink-65)] truncate ${big ? "text-xl xl:text-2xl mt-3" : "text-sm mt-1"}`}>{current?.artists.join(", ") ?? "Start a playlist"}</p>
+      <p className={`text-[color:var(--ink-40)] uppercase tracking-wide truncate ${big ? "text-sm mt-2" : "text-[11px] mt-0.5"}`}>{current?.albumName ?? ""}</p>
     </>
   );
 
-  const transportContent = (
-    <>
-      <div className="flex items-center justify-between text-[11px] text-[color:var(--ink-40)] tabular-nums mb-2">
-        <span>{formatDuration(Math.min(positionMs, current?.duration_ms ?? 0))}</span>
-        <span>{current ? formatDuration(current.duration_ms) : "0:00"}</span>
-      </div>
-      <div className="h-1 bg-[color:var(--ink-10)] rounded-full overflow-hidden">
-        <div className="h-full transition-[width] duration-200 ease-linear" style={{ width: `${pct}%`, background: "var(--accent)" }} />
-      </div>
-      <div className="flex items-center justify-center gap-8 mt-4">
-        <button onClick={handlePrev} title="Previous" className="text-[color:var(--ink-65)] hover:text-[color:var(--ink)] transition-colors">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="2.5" height="14" rx="1" /><path d="M20 5.5v13L9.5 12 20 5.5z" /></svg>
-        </button>
-        <button onClick={handlePlayPause} title={playing ? "Pause" : "Play"} className="hover:opacity-80 transition-opacity" style={{ color: "var(--accent)" }}>
-          {playing ? (
-            <svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor"><rect x="6.5" y="5" width="3.5" height="14" rx="1" /><rect x="14" y="5" width="3.5" height="14" rx="1" /></svg>
-          ) : (
-            <svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5.5v13L19 12 7 5.5z" /></svg>
-          )}
-        </button>
-        <button onClick={handleNext} title="Next" className="text-[color:var(--ink-65)] hover:text-[color:var(--ink)] transition-colors">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M4 5.5v13L14.5 12 4 5.5z" /><rect x="16.5" y="5" width="2.5" height="14" rx="1" /></svg>
-        </button>
-      </div>
-    </>
-  );
+  const renderTransport = (big = false) => {
+    const side = big ? 30 : 22;
+    const main = big ? 46 : 30;
+    return (
+      <>
+        <div className={`flex items-center justify-between text-[color:var(--ink-40)] tabular-nums ${big ? "text-sm mb-3" : "text-[11px] mb-2"}`}>
+          <span>{formatDuration(Math.min(positionMs, current?.duration_ms ?? 0))}</span>
+          <span>{current ? formatDuration(current.duration_ms) : "0:00"}</span>
+        </div>
+        <div className={`bg-[color:var(--ink-10)] rounded-full overflow-hidden ${big ? "h-2" : "h-1"}`}>
+          <div className="h-full transition-[width] duration-200 ease-linear" style={{ width: `${pct}%`, background: "var(--accent)" }} />
+        </div>
+        <div className={`flex items-center justify-center ${big ? "gap-12 mt-8" : "gap-8 mt-4"}`}>
+          <button onClick={handlePrev} title="Previous" className="text-[color:var(--ink-65)] hover:text-[color:var(--ink)] transition-colors">
+            <svg width={side} height={side} viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="2.5" height="14" rx="1" /><path d="M20 5.5v13L9.5 12 20 5.5z" /></svg>
+          </button>
+          <button onClick={handlePlayPause} title={playing ? "Pause" : "Play"} className="hover:opacity-80 transition-opacity" style={{ color: "var(--accent)" }}>
+            {playing ? (
+              <svg width={main} height={main} viewBox="0 0 24 24" fill="currentColor"><rect x="6.5" y="5" width="3.5" height="14" rx="1" /><rect x="14" y="5" width="3.5" height="14" rx="1" /></svg>
+            ) : (
+              <svg width={main} height={main} viewBox="0 0 24 24" fill="currentColor"><path d="M7 5.5v13L19 12 7 5.5z" /></svg>
+            )}
+          </button>
+          <button onClick={handleNext} title="Next" className="text-[color:var(--ink-65)] hover:text-[color:var(--ink)] transition-colors">
+            <svg width={side} height={side} viewBox="0 0 24 24" fill="currentColor"><path d="M4 5.5v13L14.5 12 4 5.5z" /><rect x="16.5" y="5" width="2.5" height="14" rx="1" /></svg>
+          </button>
+        </div>
+      </>
+    );
+  };
 
   const rightColumn = (
     <motion.section layout layoutId="rightcol" transition={MORPH} className="flex flex-col min-h-0 gap-5">
@@ -475,11 +481,14 @@ export default function PartyPage() {
         <LayoutGroup>
           {showLyrics ? (
             <div key="lyrics-layout" className="relative z-10 flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)_minmax(0,300px)] gap-8 lg:gap-12 px-8 lg:px-10 pt-9 pb-6">
-              {/* LEFT — cover + now-playing bubble + timeline bubble */}
+              {/* LEFT — cover + now-playing bubble + timeline bubble. borderRadius
+                  is set inline (not just via the lg-panel class) so Framer can
+                  counter-scale it during the layout morph — otherwise the rounded
+                  corners distort/square off while the panels resize. */}
               <section className="hidden lg:flex flex-col min-h-0 gap-5">
-                <motion.div layout layoutId="cover" transition={MORPH} className={`${GLASS} p-5 flex items-center justify-center min-h-0 flex-1`}>{albumImg}</motion.div>
-                <motion.div layout layoutId="np" transition={MORPH} className={`${GLASS} p-5`}>{nowPlayingContent}</motion.div>
-                <motion.div layout layoutId="tp" transition={MORPH} className={`${GLASS} p-5`}>{transportContent}</motion.div>
+                <motion.div layout layoutId="cover" transition={MORPH} className={`${GLASS} p-5 flex items-center justify-center min-h-0 flex-1`} style={{ borderRadius: 26 }}>{albumImg}</motion.div>
+                <motion.div layout layoutId="np" transition={MORPH} className={`${GLASS} p-5`} style={{ borderRadius: 26 }}>{renderNowPlaying()}</motion.div>
+                <motion.div layout layoutId="tp" transition={MORPH} className={`${GLASS} p-5`} style={{ borderRadius: 26 }}>{renderTransport()}</motion.div>
               </section>
 
               {/* CENTER — lyrics over the gradient (halo for legibility) */}
@@ -495,16 +504,23 @@ export default function PartyPage() {
               {/* HERO — the cover / now-playing / timeline bubbles morph in from
                   the lyrics layout (cover expands, now-playing + timeline slide
                   right) and fuse into ONE large bubble: cover fills the left, the
-                  now-playing (top) + timeline (bottom) stack on its right. The
-                  flush squared inner corners + dropped inner borders make the
-                  three morph targets read as a single bubble once settled. */}
+                  now-playing (top) + timeline (bottom) stack on its right. Every
+                  internal edge has its border AND inset/sheen highlight stripped
+                  (lg-flat) on BOTH sides so there are no divider lines — only the
+                  bubble's outer perimeter carries the rim, sheen and drop shadow. */}
               <section className="min-h-0 grid grid-cols-1 lg:grid-cols-2 grid-rows-[minmax(0,1fr)_auto_auto] lg:grid-rows-2">
                 <motion.div
                   layout
                   layoutId="cover"
                   transition={MORPH}
-                  className={`${GLASS} p-6 flex items-center justify-center min-h-0 lg:row-span-2`}
-                  style={{ borderTopRightRadius: 0, borderBottomRightRadius: 0 }}
+                  className={`${GLASS} p-8 flex items-center justify-center min-h-0 lg:row-span-2`}
+                  style={{
+                    borderTopLeftRadius: 26,
+                    borderBottomLeftRadius: 26,
+                    borderTopRightRadius: 0,
+                    borderBottomRightRadius: 0,
+                    borderRight: "none",
+                  }}
                 >
                   {albumImg}
                 </motion.div>
@@ -512,29 +528,39 @@ export default function PartyPage() {
                   layout
                   layoutId="np"
                   transition={MORPH}
-                  className={`${GLASS} p-6 flex flex-col justify-center min-h-0`}
+                  className={`${GLASS} lg-flat p-8 xl:p-10 flex flex-col justify-center min-h-0`}
                   style={{
                     borderTopLeftRadius: 0,
                     borderBottomLeftRadius: 0,
                     borderBottomRightRadius: 0,
+                    borderTopRightRadius: 26,
                     borderLeft: "none",
                     borderBottom: "none",
-                    // No outer drop shadow on the top piece — otherwise it casts a
-                    // seam onto the timeline below and breaks the one-bubble look.
-                    // The cover (left) + timeline (bottom) carry the bubble's shadow.
-                    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.40), inset 0 -1px 2px rgba(0,0,0,0.06)",
+                    // Only the outer top edge highlight — no drop shadow (would seam
+                    // onto the timeline) and no bottom inset (internal junction).
+                    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.40)",
                   }}
                 >
-                  {nowPlayingContent}
+                  {renderNowPlaying(true)}
                 </motion.div>
                 <motion.div
                   layout
                   layoutId="tp"
                   transition={MORPH}
-                  className={`${GLASS} p-6 flex flex-col justify-center min-h-0`}
-                  style={{ borderTopLeftRadius: 0, borderTopRightRadius: 0, borderBottomLeftRadius: 0, borderLeft: "none" }}
+                  className={`${GLASS} lg-flat p-8 xl:p-10 flex flex-col justify-center min-h-0`}
+                  style={{
+                    borderTopLeftRadius: 0,
+                    borderTopRightRadius: 0,
+                    borderBottomLeftRadius: 0,
+                    borderBottomRightRadius: 26,
+                    borderLeft: "none",
+                    borderTop: "none",
+                    // Carries the bubble's bottom-right drop shadow + bottom inset;
+                    // no top highlight (that edge is the internal np/tp junction).
+                    boxShadow: "0 14px 44px rgba(0,0,0,0.22), inset 0 -1px 2px rgba(0,0,0,0.06)",
+                  }}
                 >
-                  {transportContent}
+                  {renderTransport(true)}
                 </motion.div>
               </section>
 
