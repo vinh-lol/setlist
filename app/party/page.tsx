@@ -339,7 +339,7 @@ export default function PartyPage() {
   );
 
   const rightColumn = (
-    <motion.section layout layoutId="rightcol" transition={MORPH} className="flex flex-col min-h-0 gap-5 overflow-hidden">
+    <motion.section layout layoutId="rightcol" transition={MORPH} className="flex flex-col min-h-0 gap-5">
       <div>
         <input
           value={date}
@@ -476,7 +476,7 @@ export default function PartyPage() {
           {showLyrics ? (
             <div key="lyrics-layout" className="relative z-10 flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)_minmax(0,300px)] gap-8 lg:gap-12 px-8 lg:px-10 pt-9 pb-6">
               {/* LEFT — cover + now-playing bubble + timeline bubble */}
-              <section className="hidden lg:flex flex-col min-h-0 gap-5 overflow-hidden">
+              <section className="hidden lg:flex flex-col min-h-0 gap-5">
                 <motion.div layout layoutId="cover" transition={MORPH} className={`${GLASS} p-5 flex items-center justify-center min-h-0 flex-1`}>{albumImg}</motion.div>
                 <motion.div layout layoutId="np" transition={MORPH} className={`${GLASS} p-5`}>{nowPlayingContent}</motion.div>
                 <motion.div layout layoutId="tp" transition={MORPH} className={`${GLASS} p-5`}>{transportContent}</motion.div>
@@ -492,14 +492,50 @@ export default function PartyPage() {
             </div>
           ) : (
             <div key="hero-layout" className="relative z-10 flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,300px)] gap-8 lg:gap-12 px-8 lg:px-10 pt-9 pb-6">
-              {/* HERO — big cover + one long player bubble fill the lyrics space */}
-              <section className="flex flex-col items-center justify-center min-h-0 gap-6 overflow-hidden">
-                <motion.div layout layoutId="cover" transition={MORPH} className={`${GLASS} p-4 flex items-center justify-center w-full max-w-[min(42vh,420px)] max-h-[52vh]`}>{albumImg}</motion.div>
-                {/* one long bubble: now-playing (left) + timeline (right), flush */}
-                <div className="w-full max-w-2xl flex items-stretch">
-                  <motion.div layout layoutId="np" transition={MORPH} className={`${GLASS} p-5 flex-1 flex flex-col justify-center`} style={{ borderTopRightRadius: 0, borderBottomRightRadius: 0 }}>{nowPlayingContent}</motion.div>
-                  <motion.div layout layoutId="tp" transition={MORPH} className={`${GLASS} p-5 flex-1 flex flex-col justify-center`} style={{ borderTopLeftRadius: 0, borderBottomLeftRadius: 0, borderLeft: "none" }}>{transportContent}</motion.div>
-                </div>
+              {/* HERO — the cover / now-playing / timeline bubbles morph in from
+                  the lyrics layout (cover expands, now-playing + timeline slide
+                  right) and fuse into ONE large bubble: cover fills the left, the
+                  now-playing (top) + timeline (bottom) stack on its right. The
+                  flush squared inner corners + dropped inner borders make the
+                  three morph targets read as a single bubble once settled. */}
+              <section className="min-h-0 grid grid-cols-1 lg:grid-cols-2 grid-rows-[minmax(0,1fr)_auto_auto] lg:grid-rows-2">
+                <motion.div
+                  layout
+                  layoutId="cover"
+                  transition={MORPH}
+                  className={`${GLASS} p-6 flex items-center justify-center min-h-0 lg:row-span-2`}
+                  style={{ borderTopRightRadius: 0, borderBottomRightRadius: 0 }}
+                >
+                  {albumImg}
+                </motion.div>
+                <motion.div
+                  layout
+                  layoutId="np"
+                  transition={MORPH}
+                  className={`${GLASS} p-6 flex flex-col justify-center min-h-0`}
+                  style={{
+                    borderTopLeftRadius: 0,
+                    borderBottomLeftRadius: 0,
+                    borderBottomRightRadius: 0,
+                    borderLeft: "none",
+                    borderBottom: "none",
+                    // No outer drop shadow on the top piece — otherwise it casts a
+                    // seam onto the timeline below and breaks the one-bubble look.
+                    // The cover (left) + timeline (bottom) carry the bubble's shadow.
+                    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.40), inset 0 -1px 2px rgba(0,0,0,0.06)",
+                  }}
+                >
+                  {nowPlayingContent}
+                </motion.div>
+                <motion.div
+                  layout
+                  layoutId="tp"
+                  transition={MORPH}
+                  className={`${GLASS} p-6 flex flex-col justify-center min-h-0`}
+                  style={{ borderTopLeftRadius: 0, borderTopRightRadius: 0, borderBottomLeftRadius: 0, borderLeft: "none" }}
+                >
+                  {transportContent}
+                </motion.div>
               </section>
 
               {/* RIGHT — editable date + title + info */}
