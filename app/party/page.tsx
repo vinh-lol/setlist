@@ -141,17 +141,24 @@ export default function PartyPage() {
     return () => window.removeEventListener("keydown", onKey);
   }, [lyricLead]);
 
-  // Auto-grow the title textarea to fit its wrapped lines. Re-measure after web
-  // fonts load (otherwise the height is measured with the fallback font and the
-  // taller real font gets clipped) and on resize.
+  // Auto-grow the title textarea to fit its wrapped lines. On a fresh load the
+  // first measure can run before the grid/column has its final width (or before
+  // web fonts swap in), so a wrapped two-line title gets clamped to one line.
+  // We re-measure after the next paint (rAF), after fonts load, and whenever the
+  // textarea's rendered width actually changes (ResizeObserver) to fix that.
   useEffect(() => {
     const el = titleRef.current;
     if (!el) return;
     const resize = () => { el.style.height = "auto"; el.style.height = `${el.scrollHeight}px`; };
     resize();
+    const raf = requestAnimationFrame(resize);
     document.fonts?.ready.then(resize).catch(() => {});
-    window.addEventListener("resize", resize);
-    return () => window.removeEventListener("resize", resize);
+    let lastW = el.clientWidth;
+    const ro = new ResizeObserver(() => {
+      if (el.clientWidth !== lastW) { lastW = el.clientWidth; resize(); }
+    });
+    ro.observe(el);
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); };
   }, [title]);
 
   const saveDate = (v: string) => { setDate(v); ls(K_DATE, v); };
@@ -307,7 +314,7 @@ export default function PartyPage() {
   const renderNowPlaying = (big = false) => (
     <>
       <p className={`font-bold uppercase tracking-[0.12em] text-[color:var(--ink-40)] ${big ? "text-base mb-4" : "text-[11px] mb-2"}`}>Now Playing</p>
-      <p className={`font-bold uppercase tracking-tight leading-[0.95] line-clamp-3 ${big ? "text-5xl xl:text-6xl" : "text-xl"}`}>{current?.name ?? "Nothing playing"}</p>
+      <p className={`font-bold uppercase tracking-tight leading-[0.95] break-words ${big ? "text-[clamp(2rem,3.8vw,3.75rem)] line-clamp-3" : "text-xl line-clamp-2"}`}>{current?.name ?? "Nothing playing"}</p>
       <p className={`text-[color:var(--ink-65)] truncate ${big ? "text-2xl xl:text-3xl mt-4" : "text-sm mt-1"}`}>{current?.artists.join(", ") ?? "Start a playlist"}</p>
       <p className={`text-[color:var(--ink-40)] uppercase tracking-wide truncate ${big ? "text-base mt-2" : "text-[11px] mt-0.5"}`}>{current?.albumName ?? ""}</p>
     </>
@@ -500,75 +507,30 @@ export default function PartyPage() {
               {rightColumn}
             </div>
           ) : (
-            <div key="hero-layout" className="relative z-10 flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,300px)] gap-8 lg:gap-12 px-8 lg:px-10 pt-9 pb-6">
-              {/* HERO — the cover / now-playing / timeline bubbles morph in from
-                  the lyrics layout (cover expands, now-playing + timeline slide
-                  right) and fuse into ONE large bubble: cover fills the left, the
-                  now-playing (top) + timeline (bottom) stack on its right. Every
-                  internal edge has its border AND inset/sheen highlight stripped
-                  (lg-flat) on BOTH sides so there are no divider lines — only the
-                  bubble's outer perimeter carries the rim, sheen and drop shadow. */}
-              <section className="min-h-0 grid grid-cols-1 lg:grid-cols-2 grid-rows-[minmax(0,1fr)_auto_auto] lg:grid-rows-2">
-                <motion.div
-                  layout
-                  layoutId="cover"
-                  transition={MORPH}
-                  // Plain blur (no lg-distort): the displacement filter's noise is
-                  // per-element, so it would mismatch at the fused internal seams.
-                  className="lg-panel p-8 flex items-center justify-center min-h-0 lg:row-span-2"
-                  style={{
-                    borderTopLeftRadius: 26,
-                    borderBottomLeftRadius: 26,
-                    borderTopRightRadius: 0,
-                    borderBottomRightRadius: 0,
-                    borderRight: "none",
-                  }}
-                >
-                  {albumImg}
-                </motion.div>
-                <motion.div
-                  layout
-                  layoutId="np"
-                  transition={MORPH}
-                  className="lg-panel lg-flat p-8 xl:p-10 flex flex-col justify-center min-h-0"
-                  style={{
-                    borderTopLeftRadius: 0,
-                    borderBottomLeftRadius: 0,
-                    borderBottomRightRadius: 0,
-                    borderTopRightRadius: 26,
-                    borderLeft: "none",
-                    borderBottom: "none",
-                    // Only the outer top edge highlight — no drop shadow (would seam
-                    // onto the timeline) and no bottom inset (internal junction).
-                    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.40)",
-                  }}
-                >
-                  {renderNowPlaying(true)}
-                </motion.div>
-                <motion.div
-                  layout
-                  layoutId="tp"
-                  transition={MORPH}
-                  className="lg-panel lg-flat p-8 xl:p-10 flex flex-col justify-center min-h-0"
-                  style={{
-                    borderTopLeftRadius: 0,
-                    borderTopRightRadius: 0,
-                    borderBottomLeftRadius: 0,
-                    borderBottomRightRadius: 26,
-                    borderLeft: "none",
-                    borderTop: "none",
-                    // Carries the bubble's bottom-right drop shadow + bottom inset;
-                    // no top highlight (that edge is the internal np/tp junction).
-                    boxShadow: "0 14px 44px rgba(0,0,0,0.22), inset 0 -1px 2px rgba(0,0,0,0.06)",
-                  }}
-                >
-                  {renderTransport(true)}
-                </motion.div>
+            <motion.div
+              key="hero-layout"
+              initial={{ opacity: 0, scale: 0.985 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={MORPH}
+              className="relative z-10 flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,300px)] gap-8 lg:gap-12 px-8 lg:px-10 pt-9 pb-6"
+            >
+              {/* HERO — ONE bubble. A single lg-panel means a single backdrop-filter
+                  region, so there are NO internal seams: three separate panels each
+                  blur only their own clipped area, which left faint divider lines no
+                  matter how borders/shadows were tuned. Cover fills the left;
+                  now-playing (top) + timeline (bottom) stack on the right, inside the
+                  same bubble. */}
+              <section className="min-h-0">
+                <div className={`${GLASS} h-full w-full grid grid-cols-1 lg:grid-cols-2 grid-rows-[minmax(0,1fr)_auto_auto] lg:grid-rows-2`}>
+                  <div className="lg:row-span-2 flex items-center justify-center min-h-0 p-8">{albumImg}</div>
+                  <div className="min-w-0 flex flex-col justify-center min-h-0 px-8 xl:px-12 pt-8 xl:pt-10 lg:pb-3">{renderNowPlaying(true)}</div>
+                  <div className="min-w-0 flex flex-col justify-center min-h-0 px-8 xl:px-12 pb-8 xl:pb-10 lg:pt-3">{renderTransport(true)}</div>
+                </div>
               </section>
 
               {/* RIGHT — editable date + title + info */}
               {rightColumn}
-            </div>
+            </motion.div>
           )}
         </LayoutGroup>
       </MotionConfig>
