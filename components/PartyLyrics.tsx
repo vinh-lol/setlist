@@ -33,6 +33,10 @@ export default function PartyLyrics({ lines, activeIdx, positionMs, plain, loadi
   const vpRef = useRef<HTMLDivElement>(null);
   const lineRefs = useRef<(HTMLDivElement | null)[]>([]);
   const [ty, setTy] = useState(0);
+  // How many lines past the current one to reveal — measured so the (fixed-size)
+  // lyrics box is filled regardless of how short the lines are. Always ≥ 1 so
+  // there's a "next" line even when lines are tall.
+  const [maxRel, setMaxRel] = useState(1);
 
   const idx = activeIdx < 0 ? 0 : activeIdx;
 
@@ -40,7 +44,19 @@ export default function PartyLyrics({ lines, activeIdx, positionMs, plain, loadi
     const measure = () => {
       const vp = vpRef.current;
       const el = lineRefs.current[idx];
-      if (vp && el) setTy(vp.clientHeight * ANCHOR_FRAC - el.offsetTop);
+      if (!vp || !el || !lines) return;
+      const anchorTop = vp.clientHeight * ANCHOR_FRAC;
+      setTy(anchorTop - el.offsetTop);
+      // Include each following line whose top still lands inside the viewport
+      // (the bottom fade mask softens the last, partially-shown one).
+      let last = 1;
+      for (let i = idx + 1; i < lines.length; i++) {
+        const e = lineRefs.current[i];
+        if (!e) break;
+        if (anchorTop + (e.offsetTop - el.offsetTop) < vp.clientHeight) last = i - idx;
+        else break;
+      }
+      setMaxRel(last);
     };
     measure();
     window.addEventListener("resize", measure);
@@ -67,7 +83,7 @@ export default function PartyLyrics({ lines, activeIdx, positionMs, plain, loadi
         >
           {lines.map((l, i) => {
             const rel = i - idx;
-            const visible = rel === 0 || rel === 1; // current + next only
+            const visible = rel >= 0 && rel <= maxRel; // current + as many as fit
             const words = (l.text || "♪").split(/\s+/).filter(Boolean);
             const revealed = rel === 0 ? curRevealed : 0;
             return (
