@@ -306,26 +306,26 @@ export default function PartyPage() {
   // where there's far more room than in the lyrics layout's slim left column.
   const renderNowPlaying = (big = false) => (
     <>
-      <p className={`font-bold uppercase tracking-[0.12em] text-[color:var(--ink-40)] ${big ? "text-sm mb-3" : "text-[11px] mb-2"}`}>Now Playing</p>
-      <p className={`font-bold uppercase tracking-tight leading-tight line-clamp-2 ${big ? "text-4xl xl:text-5xl" : "text-xl"}`}>{current?.name ?? "Nothing playing"}</p>
-      <p className={`text-[color:var(--ink-65)] truncate ${big ? "text-xl xl:text-2xl mt-3" : "text-sm mt-1"}`}>{current?.artists.join(", ") ?? "Start a playlist"}</p>
-      <p className={`text-[color:var(--ink-40)] uppercase tracking-wide truncate ${big ? "text-sm mt-2" : "text-[11px] mt-0.5"}`}>{current?.albumName ?? ""}</p>
+      <p className={`font-bold uppercase tracking-[0.12em] text-[color:var(--ink-40)] ${big ? "text-base mb-4" : "text-[11px] mb-2"}`}>Now Playing</p>
+      <p className={`font-bold uppercase tracking-tight leading-[0.95] line-clamp-3 ${big ? "text-5xl xl:text-6xl" : "text-xl"}`}>{current?.name ?? "Nothing playing"}</p>
+      <p className={`text-[color:var(--ink-65)] truncate ${big ? "text-2xl xl:text-3xl mt-4" : "text-sm mt-1"}`}>{current?.artists.join(", ") ?? "Start a playlist"}</p>
+      <p className={`text-[color:var(--ink-40)] uppercase tracking-wide truncate ${big ? "text-base mt-2" : "text-[11px] mt-0.5"}`}>{current?.albumName ?? ""}</p>
     </>
   );
 
   const renderTransport = (big = false) => {
-    const side = big ? 30 : 22;
-    const main = big ? 46 : 30;
+    const side = big ? 34 : 22;
+    const main = big ? 54 : 30;
     return (
       <>
-        <div className={`flex items-center justify-between text-[color:var(--ink-40)] tabular-nums ${big ? "text-sm mb-3" : "text-[11px] mb-2"}`}>
+        <div className={`flex items-center justify-between text-[color:var(--ink-40)] tabular-nums ${big ? "text-base mb-3" : "text-[11px] mb-2"}`}>
           <span>{formatDuration(Math.min(positionMs, current?.duration_ms ?? 0))}</span>
           <span>{current ? formatDuration(current.duration_ms) : "0:00"}</span>
         </div>
-        <div className={`bg-[color:var(--ink-10)] rounded-full overflow-hidden ${big ? "h-2" : "h-1"}`}>
+        <div className={`bg-[color:var(--ink-10)] rounded-full overflow-hidden ${big ? "h-2.5" : "h-1"}`}>
           <div className="h-full transition-[width] duration-200 ease-linear" style={{ width: `${pct}%`, background: "var(--accent)" }} />
         </div>
-        <div className={`flex items-center justify-center ${big ? "gap-12 mt-8" : "gap-8 mt-4"}`}>
+        <div className={`flex items-center justify-center ${big ? "gap-14 mt-9" : "gap-8 mt-4"}`}>
           <button onClick={handlePrev} title="Previous" className="text-[color:var(--ink-65)] hover:text-[color:var(--ink)] transition-colors">
             <svg width={side} height={side} viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="2.5" height="14" rx="1" /><path d="M20 5.5v13L9.5 12 20 5.5z" /></svg>
           </button>
@@ -513,7 +513,9 @@ export default function PartyPage() {
                   layout
                   layoutId="cover"
                   transition={MORPH}
-                  className={`${GLASS} p-8 flex items-center justify-center min-h-0 lg:row-span-2`}
+                  // Plain blur (no lg-distort): the displacement filter's noise is
+                  // per-element, so it would mismatch at the fused internal seams.
+                  className="lg-panel p-8 flex items-center justify-center min-h-0 lg:row-span-2"
                   style={{
                     borderTopLeftRadius: 26,
                     borderBottomLeftRadius: 26,
@@ -528,7 +530,7 @@ export default function PartyPage() {
                   layout
                   layoutId="np"
                   transition={MORPH}
-                  className={`${GLASS} lg-flat p-8 xl:p-10 flex flex-col justify-center min-h-0`}
+                  className="lg-panel lg-flat p-8 xl:p-10 flex flex-col justify-center min-h-0"
                   style={{
                     borderTopLeftRadius: 0,
                     borderBottomLeftRadius: 0,
@@ -547,7 +549,7 @@ export default function PartyPage() {
                   layout
                   layoutId="tp"
                   transition={MORPH}
-                  className={`${GLASS} lg-flat p-8 xl:p-10 flex flex-col justify-center min-h-0`}
+                  className="lg-panel lg-flat p-8 xl:p-10 flex flex-col justify-center min-h-0"
                   style={{
                     borderTopLeftRadius: 0,
                     borderTopRightRadius: 0,
