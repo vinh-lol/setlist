@@ -314,8 +314,8 @@ export default function PartyPage() {
   const renderNowPlaying = (big = false) => (
     <>
       <p className={`font-bold uppercase tracking-[0.12em] text-[color:var(--ink-40)] ${big ? "text-base mb-4" : "text-[11px] mb-2"}`}>Now Playing</p>
-      <p className={`font-bold uppercase tracking-tight leading-[0.95] break-words ${big ? "text-[clamp(2rem,3.8vw,3.75rem)] line-clamp-3" : "text-xl line-clamp-2"}`}>{current?.name ?? "Nothing playing"}</p>
-      <p className={`text-[color:var(--ink-65)] truncate ${big ? "text-2xl xl:text-3xl mt-4" : "text-sm mt-1"}`}>{current?.artists.join(", ") ?? "Start a playlist"}</p>
+      <p className={`font-bold uppercase tracking-tight leading-[1.02] pb-[0.06em] break-words ${big ? "text-[clamp(1.75rem,3.4vw,3.25rem)] line-clamp-3" : "text-xl line-clamp-2"}`}>{current?.name ?? "Nothing playing"}</p>
+      <p className={`text-[color:var(--ink-65)] break-words ${big ? "text-2xl xl:text-3xl mt-4 line-clamp-2" : "text-sm mt-1 line-clamp-2"}`}>{current?.artists.join(", ") ?? "Start a playlist"}</p>
       <p className={`text-[color:var(--ink-40)] uppercase tracking-wide truncate ${big ? "text-base mt-2" : "text-[11px] mt-0.5"}`}>{current?.albumName ?? ""}</p>
     </>
   );
@@ -369,7 +369,7 @@ export default function PartyPage() {
           placeholder="PARTY TITLE"
           spellCheck={false}
           rows={1}
-          className={`${editBase} font-black uppercase tracking-tight leading-[0.95] break-words text-5xl xl:text-6xl w-full resize-none overflow-hidden px-2 py-2`}
+          className={`${editBase} font-black uppercase tracking-tight leading-[1.05] break-words text-5xl xl:text-6xl w-full resize-none overflow-hidden px-2 py-2`}
           style={{ fontFamily: "var(--font-sans)", color: "var(--primary)", textShadow: halo }}
         />
         <div className="w-10 border-t mt-5" style={{ borderColor: "var(--accent)" }} />
