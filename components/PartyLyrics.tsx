@@ -15,7 +15,8 @@ interface Props {
 
 const FADE_MASK = "linear-gradient(to bottom, transparent, black 4%, black 90%, transparent)";
 const ANCHOR_FRAC = 0.06; // current line sits at the top, aligned with the cover/title
-const AVG_WORD_MS = 330;
+const MAX_WORD_MS = 700;  // cap per-word reveal so a held note / instrumental gap can't crawl
+const LAST_WORD_MS = 380; // steady fallback pace for the final line (no next line to time against)
 
 function Empty({ children }: { children: React.ReactNode }) {
   return (
@@ -71,9 +72,24 @@ export default function PartyLyrics({ lines, activeIdx, positionMs, plain, loadi
     const nxt = lines[idx + 1] ?? null;
     const curWords = (cur?.text || "♪").split(/\s+/).filter(Boolean);
     const gap = nxt ? nxt.timeMs - cur.timeMs : Infinity;
-    const revealDur = Math.max(450, Math.min(gap, curWords.length * AVG_WORD_MS));
-    const frac = !started ? 0 : Math.min(1, Math.max(0, (positionMs - cur.timeMs) / revealDur));
-    const curRevealed = Math.min(curWords.length, Math.ceil(frac * curWords.length));
+    // Spread the reveal across the line's real on-screen window (the gap to the
+    // next line) instead of a fixed per-word pace, so the fill tracks how long the
+    // line is actually sung. Cap it so a long held note / instrumental tail can't
+    // make the reveal crawl; use a steady pace on the final line (no next line).
+    const revealDur = Number.isFinite(gap)
+      ? Math.min(gap, curWords.length * MAX_WORD_MS)
+      : curWords.length * LAST_WORD_MS;
+    const frac = !started ? -1 : Math.min(1, Math.max(0, (positionMs - cur.timeMs) / revealDur));
+    // Reveal weighted by word length (a rough syllable/duration proxy) rather than
+    // equal slices, so longer words hold the line longer — closer to real singing.
+    const wlens = curWords.map((w) => Math.max(2, w.replace(/[^\p{L}\p{N}]/gu, "").length || w.length));
+    const totalW = wlens.reduce((a, b) => a + b, 0) || 1;
+    let acc = 0;
+    let curRevealed = 0;
+    for (let i = 0; i < curWords.length; i++) {
+      if (frac >= acc / totalW) curRevealed = i + 1; else break;
+      acc += wlens[i];
+    }
 
     return (
       <div ref={vpRef} className="relative h-full overflow-hidden" style={{ maskImage: FADE_MASK, WebkitMaskImage: FADE_MASK }}>
