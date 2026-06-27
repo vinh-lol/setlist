@@ -33,6 +33,7 @@ interface InfoItem { label: string; time: string; }
 
 const K_DATE = "party-date";
 const K_TITLE = "party-title";
+const K_TITLE_H = "party-title-h";
 const K_INFO = "party-info";
 const K_LYRIC_LEAD = "party-lyric-lead";
 
@@ -87,6 +88,10 @@ export default function PartyPage() {
   const [title, setTitle] = useState("");
   const [info, setInfo] = useState<InfoItem[]>([]);
   const titleRef = useRef<HTMLTextAreaElement>(null);
+  const measuredFor = useRef<string | null>(null);
+  // Auto-grown title height, persisted so it stays constant across the
+  // lyrics/hero layout swap and across reloads (see the measure effect below).
+  const [titleH, setTitleH] = useState<number>();
 
   const [isFullscreen, setIsFullscreen] = useState(false);
 
@@ -108,7 +113,13 @@ export default function PartyPage() {
   useEffect(() => {
     try {
       setDate(localStorage.getItem(K_DATE) ?? "");
-      setTitle(localStorage.getItem(K_TITLE) ?? localStorage.getItem("party-custom-text") ?? "");
+      const savedTitle = localStorage.getItem(K_TITLE) ?? localStorage.getItem("party-custom-text") ?? "";
+      setTitle(savedTitle);
+      const savedH = localStorage.getItem(K_TITLE_H);
+      if (savedH !== null && !Number.isNaN(Number(savedH))) {
+        setTitleH(Number(savedH));
+        measuredFor.current = savedTitle; // height already matches this text — don't re-measure on mount
+      }
       const raw = localStorage.getItem(K_INFO);
       setInfo(raw ? JSON.parse(raw) : [{ label: "", time: "" }]);
       const lead = localStorage.getItem(K_LYRIC_LEAD);
@@ -141,38 +152,30 @@ export default function PartyPage() {
     return () => window.removeEventListener("keydown", onKey);
   }, [lyricLead]);
 
-  // Auto-grow the title textarea to fit its wrapped lines. On a fresh load the
-  // first measure can run before the grid/column has its final width (or before
-  // web fonts swap in), so a wrapped two-line title gets clamped to one line.
-  // We re-measure after the next paint (rAF), after fonts load, and whenever the
-  // textarea's rendered width actually changes (ResizeObserver) to fix that.
-  //
-  // The height lives in state (not just inline on the element) because toggling
-  // the lyrics/hero layout swaps the whole subtree — the textarea unmounts and
-  // remounts at its default 1-line height. Persisting the measured height here
-  // (PartyPage stays mounted) lets the remounted textarea render at the right
-  // height immediately, and we re-measure once more after the 0.55s morph since
-  // the column width is unchanged (300px) so the ResizeObserver won't fire.
-  const [titleH, setTitleH] = useState<number>();
+  // Auto-grow the title textarea to fit its wrapped lines, but treat the result
+  // as a persisted constant. We only re-measure when the title *text* changes —
+  // never on layout remounts. The lyrics/hero layout swap unmounts and remounts
+  // the textarea (both columns are 300px wide, so the wrapping is identical), and
+  // measuring mid-morph used to clamp a 3-line title back to 1 line. Skipping the
+  // measure when the text is unchanged means the height set when you typed the
+  // title just stays — across the transition and across reloads (seeded from
+  // localStorage in the load effect). `measuredFor` tracks the text the current
+  // height belongs to.
   useEffect(() => {
     const el = titleRef.current;
-    if (!el) return;
+    if (!el || measuredFor.current === title) return;
     const measure = () => {
       el.style.height = "auto";
       const h = el.scrollHeight;
       el.style.height = `${h}px`;
       setTitleH(h);
+      measuredFor.current = title;
+      ls(K_TITLE_H, String(h));
     };
     measure();
     const raf = requestAnimationFrame(measure);
-    const settle = setTimeout(measure, 600);
     document.fonts?.ready.then(measure).catch(() => {});
-    let lastW = el.clientWidth;
-    const ro = new ResizeObserver(() => {
-      if (el.clientWidth !== lastW) { lastW = el.clientWidth; measure(); }
-    });
-    ro.observe(el);
-    return () => { cancelAnimationFrame(raf); clearTimeout(settle); ro.disconnect(); };
+    return () => cancelAnimationFrame(raf);
   }, [title]);
 
   const saveDate = (v: string) => { setDate(v); ls(K_DATE, v); };
