@@ -146,19 +146,33 @@ export default function PartyPage() {
   // web fonts swap in), so a wrapped two-line title gets clamped to one line.
   // We re-measure after the next paint (rAF), after fonts load, and whenever the
   // textarea's rendered width actually changes (ResizeObserver) to fix that.
+  //
+  // The height lives in state (not just inline on the element) because toggling
+  // the lyrics/hero layout swaps the whole subtree — the textarea unmounts and
+  // remounts at its default 1-line height. Persisting the measured height here
+  // (PartyPage stays mounted) lets the remounted textarea render at the right
+  // height immediately, and we re-measure once more after the 0.55s morph since
+  // the column width is unchanged (300px) so the ResizeObserver won't fire.
+  const [titleH, setTitleH] = useState<number>();
   useEffect(() => {
     const el = titleRef.current;
     if (!el) return;
-    const resize = () => { el.style.height = "auto"; el.style.height = `${el.scrollHeight}px`; };
-    resize();
-    const raf = requestAnimationFrame(resize);
-    document.fonts?.ready.then(resize).catch(() => {});
+    const measure = () => {
+      el.style.height = "auto";
+      const h = el.scrollHeight;
+      el.style.height = `${h}px`;
+      setTitleH(h);
+    };
+    measure();
+    const raf = requestAnimationFrame(measure);
+    const settle = setTimeout(measure, 600);
+    document.fonts?.ready.then(measure).catch(() => {});
     let lastW = el.clientWidth;
     const ro = new ResizeObserver(() => {
-      if (el.clientWidth !== lastW) { lastW = el.clientWidth; resize(); }
+      if (el.clientWidth !== lastW) { lastW = el.clientWidth; measure(); }
     });
     ro.observe(el);
-    return () => { cancelAnimationFrame(raf); ro.disconnect(); };
+    return () => { cancelAnimationFrame(raf); clearTimeout(settle); ro.disconnect(); };
   }, [title]);
 
   const saveDate = (v: string) => { setDate(v); ls(K_DATE, v); };
@@ -370,7 +384,7 @@ export default function PartyPage() {
           spellCheck={false}
           rows={1}
           className={`${editBase} font-black uppercase tracking-tight leading-[1.05] break-words text-5xl xl:text-6xl w-full resize-none overflow-hidden px-2 py-2`}
-          style={{ fontFamily: "var(--font-sans)", color: "var(--primary)", textShadow: halo }}
+          style={{ fontFamily: "var(--font-sans)", color: "var(--primary)", textShadow: halo, height: titleH }}
         />
         <div className="w-10 border-t mt-5" style={{ borderColor: "var(--accent)" }} />
       </div>
