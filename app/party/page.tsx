@@ -93,8 +93,8 @@ function DateClock({ className }: { className?: string }) {
   }, []);
   return (
     <div className={className} suppressHydrationWarning>
-      <div className="text-xs font-bold uppercase tracking-[0.12em] px-2">{fmtPartyDate(now)}</div>
       <div className="text-xs font-bold uppercase tracking-[0.12em] px-2 tabular-nums">{fmtClock(now)}</div>
+      <div className="text-xs font-bold uppercase tracking-[0.12em] px-2">{fmtPartyDate(now)}</div>
     </div>
   );
 }
@@ -394,7 +394,7 @@ export default function PartyPage() {
   const rightColumn = (
     <motion.section layout layoutId="rightcol" transition={MORPH} className="flex flex-col min-h-0 gap-5">
       <div>
-        <DateClock className="mb-2 space-y-0.5" />
+        <DateClock className="mt-3 mb-1 space-y-0.5" />
         <textarea
           ref={titleRef}
           value={title}
