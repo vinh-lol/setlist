@@ -31,7 +31,6 @@ const GradientBackground = dynamic(() => import("@/components/GradientBackground
 
 interface InfoItem { label: string; time: string; }
 
-const K_DATE = "party-date";
 const K_TITLE = "party-title";
 const K_TITLE_H = "party-title-h";
 const K_INFO = "party-info";
@@ -73,6 +72,33 @@ function activeLineIdx(lines: LyricLine[] | null, positionMs: number) {
   return idx;
 }
 
+// "MONDAY JUNE 27TH" — full weekday + month + ordinal day, uppercased.
+const ordinal = (n: number) => {
+  const s = ["TH", "ST", "ND", "RD"], v = n % 100;
+  return s[(v - 20) % 10] || s[v] || s[0];
+};
+const fmtPartyDate = (d: Date) =>
+  `${d.toLocaleDateString("en-US", { weekday: "long" })} ${d.toLocaleDateString("en-US", { month: "long" })} ${d.getDate()}${ordinal(d.getDate())}`.toUpperCase();
+// 24-hour "10:42:12".
+const fmtClock = (d: Date) =>
+  d.toLocaleTimeString("en-GB", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
+
+// Live date + clock shown above the title. Self-contained so its per-second tick
+// only re-renders this block, not the whole dashboard.
+function DateClock({ className }: { className?: string }) {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  return (
+    <div className={className} suppressHydrationWarning>
+      <div className="text-xs font-bold uppercase tracking-[0.12em] px-2">{fmtPartyDate(now)}</div>
+      <div className="text-xs font-bold uppercase tracking-[0.12em] px-2 tabular-nums">{fmtClock(now)}</div>
+    </div>
+  );
+}
+
 export default function PartyPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -84,7 +110,6 @@ export default function PartyPage() {
   const [optimisticPlaying, setOptimisticPlaying] = useState<boolean | null>(null);
 
   // Editable dashboard copy
-  const [date, setDate] = useState("");
   const [title, setTitle] = useState("");
   const [info, setInfo] = useState<InfoItem[]>([]);
   const titleRef = useRef<HTMLTextAreaElement>(null);
@@ -112,7 +137,6 @@ export default function PartyPage() {
   // Load editable copy
   useEffect(() => {
     try {
-      setDate(localStorage.getItem(K_DATE) ?? "");
       const savedTitle = localStorage.getItem(K_TITLE) ?? localStorage.getItem("party-custom-text") ?? "";
       setTitle(savedTitle);
       const savedH = localStorage.getItem(K_TITLE_H);
@@ -178,7 +202,6 @@ export default function PartyPage() {
     return () => cancelAnimationFrame(raf);
   }, [title]);
 
-  const saveDate = (v: string) => { setDate(v); ls(K_DATE, v); };
   const saveTitle = (v: string) => { setTitle(v); ls(K_TITLE, v); };
   const saveInfo = (next: InfoItem[]) => { setInfo(next); ls(K_INFO, JSON.stringify(next)); };
   const updateInfo = (i: number, field: keyof InfoItem, v: string) =>
@@ -371,14 +394,7 @@ export default function PartyPage() {
   const rightColumn = (
     <motion.section layout layoutId="rightcol" transition={MORPH} className="flex flex-col min-h-0 gap-5">
       <div>
-        <input
-          value={date}
-          onChange={(e) => saveDate(e.target.value)}
-          placeholder="ADD DATE"
-          spellCheck={false}
-          className={`${editBase} text-xs font-bold uppercase tracking-[0.12em] w-full mb-2 px-2 py-1`}
-          style={{ textShadow: halo }}
-        />
+        <DateClock className="mb-2 space-y-0.5" />
         <textarea
           ref={titleRef}
           value={title}
@@ -520,7 +536,7 @@ export default function PartyPage() {
                 <PartyLyrics lines={lyrics.synced} activeIdx={aIdx} positionMs={lyricPos} plain={lyrics.plain} loading={lyrics.loading} accent={theme.accent} faint={rgba(theme.ink, 0.28)} />
               </motion.section>
 
-              {/* RIGHT — editable date + title + info */}
+              {/* RIGHT — date/clock + editable title + info */}
               {rightColumn}
             </div>
           ) : (
@@ -545,7 +561,7 @@ export default function PartyPage() {
                 </div>
               </section>
 
-              {/* RIGHT — editable date + title + info */}
+              {/* RIGHT — date/clock + editable title + info */}
               {rightColumn}
             </motion.div>
           )}
