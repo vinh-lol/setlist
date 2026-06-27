@@ -533,7 +533,7 @@ export default function PartyPage() {
 
               {/* CENTER — lyrics over the gradient (halo for legibility) */}
               <motion.section initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.4 }} className="h-full overflow-hidden min-h-[36vh] lg:min-h-0" style={{ textShadow: halo }}>
-                <PartyLyrics lines={lyrics.synced} activeIdx={aIdx} positionMs={lyricPos} plain={lyrics.plain} loading={lyrics.loading} accent={theme.accent} faint={rgba(theme.ink, 0.28)} />
+                <PartyLyrics lines={lyrics.synced} activeIdx={aIdx} positionMs={lyricPos} plain={lyrics.plain} loading={lyrics.loading} accent={theme.lyric} faint={rgba(theme.ink, 0.28)} />
               </motion.section>
 
               {/* RIGHT — date/clock + editable title + info */}

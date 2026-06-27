@@ -21,6 +21,7 @@ export interface AlbumTheme {
   ink: string;     // body text        (Body text role)
   primary: string; // lead/title color (Primary role)
   accent: string;  // highlights/pops  (Accent role)
+  lyric: string;   // revealed lyric words (vivid accent hue, not contrast-darkened)
   support: string; // dividers/rest    (Support role)
   gradient: string[]; // 3 album colors for the moving background
   palette: string[];
@@ -32,6 +33,7 @@ export const DEFAULT_THEME: AlbumTheme = {
   ink: "#141414",
   primary: "#141414",
   accent: "#1A1A1A",
+  lyric: "#141414",
   support: "#E5E5E5",
   gradient: [],
   palette: [],
@@ -102,6 +104,17 @@ function shade(hex: string, dl: number): string {
   const c = hexToRgb(hex) ?? { r: 0, g: 0, b: 0 };
   const { h, s, l } = rgbToHsl(c.r, c.g, c.b);
   return hslToHex(h, s, clamp(l + dl, 0, 100));
+}
+
+// Lyric reveal color: the accent hue kept vivid at a mid-bright lightness. The
+// lyrics sit over the moving gradient and get their legibility from the halo
+// text-shadow, so — unlike the surface accent — they aren't darkened for contrast.
+// That contrast-darkening is exactly what dragged warm accents down into brown.
+function lyricize(hex: string): string {
+  const c = hexToRgb(hex) ?? { r: 0, g: 0, b: 0 };
+  const { h, s } = rgbToHsl(c.r, c.g, c.b);
+  if (s < 18) return hslToHex(h, s, 70); // ~monochrome cover: stay neutral, just brighten
+  return hslToHex(h, clamp(Math.max(s, 62), 0, 92), 62);
 }
 
 // A hue counts toward the gradient only if colors of that hue cover at least this
@@ -248,7 +261,8 @@ export function buildTheme(
   const accent = ensureContrast(accentRaw, surface, 3.4);
   const primary = ensureContrast(primaryRaw, surface, 3.6);
   const support = byRole("Support") ?? ink;
+  const lyric = lyricize(accentRaw); // from the vivid pick, before contrast-darkening
   const gradient = gradientColors(hexes, candidates, accent, counts.length ? counts : hexes.map((hex) => ({ hex, n: 1 })));
 
-  return { surface, ink, primary, accent, support, gradient, palette: hexes, hierarchy };
+  return { surface, ink, primary, accent, lyric, support, gradient, palette: hexes, hierarchy };
 }
