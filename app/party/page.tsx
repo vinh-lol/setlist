@@ -251,7 +251,7 @@ export default function PartyPage() {
     if (!current?.albumArt) { setTheme(DEFAULT_THEME); return; }
     let active = true;
     analyzeAlbum(current.albumArt)
-      .then(({ palette, candidates }) => { if (active) setTheme(buildTheme(palette, candidates)); })
+      .then(({ palette, candidates, counts }) => { if (active) setTheme(buildTheme(palette, candidates, counts)); })
       .catch(() => { if (active) setTheme(DEFAULT_THEME); });
     return () => { active = false; };
   }, [current?.albumArt]);

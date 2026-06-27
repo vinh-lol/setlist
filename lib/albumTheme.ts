@@ -5,7 +5,7 @@
 
 import {
   extractPaletteFromImageData,
-  medianCutQuantize,
+  medianCutQuantizeCounts,
   assignColorRoles,
   computeColorHierarchy,
   hexToRgb,
@@ -104,13 +104,46 @@ function shade(hex: string, dl: number): string {
   return hslToHex(h, s, clamp(l + dl, 0, 100));
 }
 
-// Three hue-distinct, reasonably-saturated colors for the moving gradient. Fills
-// with lightness variants of the accent on covers without three distinct hues.
-function gradientColors(palette: string[], candidates: string[], accent: string): string[] {
+// A hue counts toward the gradient only if colors of that hue cover at least this
+// share of the cover. Filters out tiny vivid pops (logos, stickers, a fleck of
+// clothing) that used to win the background on vividness alone.
+const MIN_HUE_SHARE = 0.04;
+
+// How much of the cover (0–1) is taken up by reasonably-saturated pixels near
+// `hue`. Near-grey buckets are ignored so a brown/neutral mass can't inflate a
+// hue's coverage. `counts` is the coverage-weighted candidate list.
+function hueCoverage(hue: number, counts: { hex: string; n: number }[], total: number): number {
+  let sum = 0;
+  for (const { hex, n } of counts) {
+    const c = hexToRgb(hex);
+    if (!c) continue;
+    const { h, s } = rgbToHsl(c.r, c.g, c.b);
+    if (s < 12) continue; // a near-grey pixel has no real hue to credit
+    if (hueDist(h, hue) <= 22) sum += n;
+  }
+  return sum / total;
+}
+
+// Three hue-distinct, reasonably-saturated colors for the moving gradient. Still
+// ranked by vividness (so the background keeps its pop and never goes
+// black/white/brown-dominated), but a hue must clear MIN_HUE_SHARE coverage to be
+// eligible — that's what kills the odd minority-color picks. Fills with lightness
+// variants of the accent on covers without three distinct, prominent hues.
+function gradientColors(
+  palette: string[],
+  candidates: string[],
+  accent: string,
+  counts: { hex: string; n: number }[],
+): string[] {
+  const total = counts.reduce((s, c) => s + c.n, 0) || 1;
   const pool = Array.from(new Set([...candidates, ...palette]));
   const ranked = pool
     .map((h) => ({ h, score: chromaScore(h) }))
     .filter((x) => x.score > 0)
+    .filter((x) => {
+      const c = hexToRgb(x.h);
+      return c ? hueCoverage(rgbToHsl(c.r, c.g, c.b).h, counts, total) >= MIN_HUE_SHARE : false;
+    })
     .sort((a, b) => b.score - a.score);
 
   const picked: string[] = [];
@@ -146,8 +179,13 @@ function pickVivid(candidates: string[], minSat = 28): string | null {
   return rgbToHsl(c.r, c.g, c.b).s >= minSat ? best : null;
 }
 
-// Album-art URL -> palette (for roles) + a wider candidate list (for the vivid pick).
-export function analyzeAlbum(url: string, maxDim = 160): Promise<{ palette: string[]; candidates: string[] }> {
+// Album-art URL -> palette (for roles) + a wider candidate list (for the vivid
+// pick), each candidate carrying its pixel coverage so the gradient can weight
+// by how much of the cover a color actually occupies.
+export function analyzeAlbum(
+  url: string,
+  maxDim = 160,
+): Promise<{ palette: string[]; candidates: string[]; counts: { hex: string; n: number }[] }> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.crossOrigin = "anonymous";
@@ -162,9 +200,11 @@ export function analyzeAlbum(url: string, maxDim = 160): Promise<{ palette: stri
       ctx.drawImage(img, 0, 0, w, h);
       try {
         const data = ctx.getImageData(0, 0, w, h);
+        const counts = medianCutQuantizeCounts(data, 32); // wider net to catch minority pops
         resolve({
           palette: extractPaletteFromImageData(data).colors,
-          candidates: medianCutQuantize(data, 32), // wider net to catch minority pops
+          candidates: counts.map((c) => c.hex),
+          counts,
         });
       } catch (e) { reject(e); }
     };
@@ -173,7 +213,11 @@ export function analyzeAlbum(url: string, maxDim = 160): Promise<{ palette: stri
   });
 }
 
-export function buildTheme(hexes: string[], candidates: string[] = []): AlbumTheme {
+export function buildTheme(
+  hexes: string[],
+  candidates: string[] = [],
+  counts: { hex: string; n: number }[] = [],
+): AlbumTheme {
   if (!hexes.length) return DEFAULT_THEME;
 
   const hierarchy = computeColorHierarchy(hexes);
@@ -204,7 +248,7 @@ export function buildTheme(hexes: string[], candidates: string[] = []): AlbumThe
   const accent = ensureContrast(accentRaw, surface, 3.4);
   const primary = ensureContrast(primaryRaw, surface, 3.6);
   const support = byRole("Support") ?? ink;
-  const gradient = gradientColors(hexes, candidates, accent);
+  const gradient = gradientColors(hexes, candidates, accent, counts.length ? counts : hexes.map((hex) => ({ hex, n: 1 })));
 
   return { surface, ink, primary, accent, support, gradient, palette: hexes, hierarchy };
 }

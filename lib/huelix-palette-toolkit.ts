@@ -104,6 +104,18 @@ const QUANTIZE_COLORS = 16;    // median-cut buckets before merging
 
 /** Median-cut quantization: ImageData -> up to `maxColors` average hexes. */
 export function medianCutQuantize(imageData: ImageData, maxColors: number): string[] {
+  return medianCutQuantizeCounts(imageData, maxColors).map((c) => c.hex);
+}
+
+/**
+ * Same median-cut quantization as `medianCutQuantize`, but each returned colour
+ * carries `n`, the number of source pixels in its bucket — i.e. how much of the
+ * image that colour covers. Lets callers weight by coverage, not just vividness.
+ */
+export function medianCutQuantizeCounts(
+  imageData: ImageData,
+  maxColors: number,
+): { hex: string; n: number }[] {
   const data = imageData.data;
   const pixels: number[][] = [];
   for (let i = 0; i < data.length; i += 4) {
@@ -145,7 +157,7 @@ export function medianCutQuantize(imageData: ImageData, maxColors: number): stri
     const mid = bucket.length >> 1;
     buckets.splice(target, 1, bucket.slice(0, mid), bucket.slice(mid));
   }
-  return buckets.filter((b) => b.length).map(averageColor);
+  return buckets.filter((b) => b.length).map((b) => ({ hex: averageColor(b), n: b.length }));
 }
 
 /** Agglomerative merge of near-identical colours, weighted by pixel count. */
