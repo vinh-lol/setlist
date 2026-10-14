@@ -134,6 +134,7 @@ function PartyDashboard() {
   const hasSynced = (lyrics.synced?.length ?? 0) > 0;
   const lyricsMode = config.lyrics.mode;
   const showLyrics = lyricsMode === "always" || (lyricsMode === "auto" && (lyrics.loading || hasSynced));
+  const billboard = config.background.type === "billboard";
   const upNextCount = config.widgets.upNext.count;
   const maxUpNext = upNextCount === "auto" ? (showLyrics ? 5 : 6) : upNextCount;
 
@@ -158,7 +159,16 @@ function PartyDashboard() {
       {/* The display itself. Its own box (not the window) so it can shrink
           beside the docked settings panel. */}
       <div className="relative flex-1 min-w-0 h-full overflow-hidden flex flex-col">
-      <DisplayBackground theme={theme} background={config.background} albumArt={current?.albumArt} colorMode={config.color.mode} />
+      <DisplayBackground
+        theme={theme}
+        background={config.background}
+        albumArt={current?.albumArt}
+        colorMode={config.color.mode}
+        track={current}
+        lyricLine={lyrics.synced?.[aIdx]?.text ?? null}
+        playing={playback.playing}
+        lowPower={device.lowPower}
+      />
       <CornerControls
         hidden={chromeHidden}
         isFullscreen={isFullscreen}
@@ -180,7 +190,13 @@ function PartyDashboard() {
           and resizes the cover/now-playing/timeline panels between the two. */}
       <MotionConfig reducedMotion="user">
         <LayoutGroup>
-          {showLyrics ? (
+          {billboard ? (
+            // The billboard is the now-playing display (cover and song, or the
+            // lyric line), so only the corner column stays on top of it.
+            <div className="relative z-10 flex-1 min-h-0 flex justify-end px-8 lg:px-10 pt-9 pb-6">
+              {side && <div className="w-[300px] min-h-0 flex flex-col">{side}</div>}
+            </div>
+          ) : showLyrics ? (
             <ClassicLayout
               key="lyrics-layout"
               glass={glass}
@@ -223,7 +239,7 @@ function PartyDashboard() {
       )}
       </div>
 
-      <SettingsDrawer open={settingsOpen} onClose={closeSettings} />
+      <SettingsDrawer open={settingsOpen} onClose={closeSettings} theme={theme} />
     </div>
   );
 }

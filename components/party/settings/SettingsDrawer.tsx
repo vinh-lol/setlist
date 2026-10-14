@@ -2,7 +2,9 @@
 
 import { memo, useState, type CSSProperties, type ReactNode } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { rgba } from "@/lib/albumTheme";
+import { rgba, type AlbumTheme } from "@/lib/albumTheme";
+import { backgroundInfo } from "@/lib/display/backgrounds";
+import BackgroundGallery from "./BackgroundGallery";
 import { useDisplayConfig } from "@/hooks/useDisplayConfig";
 import { DEFAULT_CONFIG, DEFAULT_LYRIC_OFFSET_MS, type DisplayConfig } from "@/lib/display/config";
 import { ColorTrio, Field, Segmented, Slider, TextInput, Toggle } from "./controls";
@@ -39,7 +41,7 @@ const PANEL_W = 400;
 // Docks beside the display on wide screens: the display shrinks to make room,
 // so every change previews on the real layout with nothing covered. On phones
 // it slides over instead. Everything saves as you go.
-function SettingsDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
+function SettingsDrawer({ open, onClose, theme }: { open: boolean; onClose: () => void; theme: AlbumTheme }) {
   const [tab, setTab] = useState<TabId>("looks");
   const { setConfig, setDevice } = useDisplayConfig();
 
@@ -91,7 +93,7 @@ function SettingsDrawer({ open, onClose }: { open: boolean; onClose: () => void 
           <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
             {tab === "looks" && <LooksTab />}
             {tab === "color" && <ColorTab />}
-            {tab === "background" && <BackgroundTab />}
+            {tab === "background" && <BackgroundTab theme={theme} />}
             {tab === "lyrics" && <LyricsTab />}
             {tab === "panels" && <PanelsTab />}
             {tab === "widgets" && <WidgetsTab />}
@@ -167,22 +169,29 @@ function ColorTab() {
   );
 }
 
-function BackgroundTab() {
+function BackgroundTab({ theme }: { theme: AlbumTheme }) {
   const [bg, set] = useSection("background");
+  const info = backgroundInfo(bg.type);
   return (
     <Group>
-      <Field label="Background">
-        <Segmented label="Background" value={bg.type} onChange={(type) => set({ type })} options={[
-          { value: "shader", label: "3D gradient" },
-          { value: "soft", label: "Soft gradient" },
-          { value: "cover", label: "Blurred cover" },
-          { value: "solid", label: "Solid" },
-          { value: "image", label: "My image" },
-        ]} />
-      </Field>
+      <BackgroundGallery value={bg.type} onChange={(type) => set({ type })} theme={theme} />
+      <p className="text-xs leading-snug text-[color:var(--ink-50)]">{info.hint}</p>
       {bg.type === "image" && (
         <Field label="Image or GIF link" hint="Leave empty to use the blurred cover.">
           <TextInput label="Image link" value={bg.imageUrl} placeholder="https://…" onChange={(imageUrl) => set({ imageUrl })} />
+        </Field>
+      )}
+      {bg.type === "billboard" && (
+        <Field label="Billboard shows">
+          <Segmented label="Billboard shows" value={bg.billboard} onChange={(billboard) => set({ billboard })} options={[
+            { value: "cover", label: "Cover and song" },
+            { value: "lyrics", label: "Lyric line" },
+          ]} />
+        </Field>
+      )}
+      {info.speed && (
+        <Field label="Motion">
+          <Slider label="Motion speed" value={bg.speed} min={0} max={2} step={0.1} onChange={(speed) => set({ speed })} format={(v) => (v === 0 ? "Paused" : `${v.toFixed(1)}x`)} />
         </Field>
       )}
       {bg.type === "shader" && (
@@ -200,17 +209,15 @@ function BackgroundTab() {
           <Toggle label="Film grain" checked={bg.shader.grain} onChange={(grain) => set({ shader: { ...bg.shader, grain } })} />
         </>
       )}
+      {(bg.type === "shader" || bg.type === "cover" || bg.type === "image") && (
+        <Field label="Blur">
+          <Slider label="Blur" value={bg.blur} min={0} max={40} step={1} onChange={(blur) => set({ blur })} format={(v) => `${v}px`} />
+        </Field>
+      )}
       {bg.type !== "solid" && (
-        <>
-          {bg.type !== "soft" && (
-            <Field label="Blur">
-              <Slider label="Blur" value={bg.blur} min={0} max={40} step={1} onChange={(blur) => set({ blur })} format={(v) => `${v}px`} />
-            </Field>
-          )}
-          <Field label="Dim" hint="Tints the background toward the theme color so text pops.">
-            <Slider label="Dim" value={bg.dim} min={0} max={0.8} step={0.02} onChange={(dim) => set({ dim })} format={(v) => `${Math.round(v * 100)}%`} />
-          </Field>
-        </>
+        <Field label="Dim" hint="Darkens or tints the background so text on top pops.">
+          <Slider label="Dim" value={bg.dim} min={0} max={0.8} step={0.02} onChange={(dim) => set({ dim })} format={(v) => `${Math.round(v * 100)}%`} />
+        </Field>
       )}
     </Group>
   );

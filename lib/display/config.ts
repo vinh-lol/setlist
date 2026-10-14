@@ -18,7 +18,10 @@
 export type ColorSource = "album" | "fixed";
 export type ColorMode = "auto" | "dark" | "light";
 export type ColorIntensity = "muted" | "balanced" | "vivid";
-export type BackgroundType = "shader" | "soft" | "cover" | "solid" | "image";
+export type BackgroundType =
+  | "shader" | "soft" | "cover" | "solid" | "image"
+  | "city" | "billboard" | "synthwave" | "stars" | "bokeh" | "vinyl";
+export const BACKGROUND_TYPES: BackgroundType[] = ["shader", "soft", "cover", "solid", "image", "city", "billboard", "synthwave", "stars", "bokeh", "vinyl"];
 export type ShaderShape = "waterPlane" | "plane" | "sphere";
 export type LyricsMode = "auto" | "always" | "off";
 export type LyricsReveal = "word" | "line";
@@ -53,6 +56,10 @@ export interface DisplayConfig {
     };
     /** Used when type = "image". */
     imageUrl: string;
+    /** Motion speed for the animated scenes (city, starfield, vinyl...), 0 = paused. */
+    speed: number;
+    /** What the billboard city's billboard shows. */
+    billboard: "cover" | "lyrics";
     /** Backdrop blur over the background, in px. */
     blur: number;
     /** Surface-colored tint over the background, 0..1. */
@@ -125,6 +132,8 @@ export const DEFAULT_CONFIG: DisplayConfig = {
       grain: false,
     },
     imageUrl: "",
+    speed: 1,
+    billboard: "cover",
     blur: 10,
     dim: 0.12,
   },
@@ -209,7 +218,9 @@ export function normalizeConfig(input: unknown): DisplayConfig {
 
   c.color.fixed.colors = c.color.fixed.colors.filter(isHex).slice(0, 3);
   while (c.color.fixed.colors.length < 3) c.color.fixed.colors.push(d.color.fixed.colors[c.color.fixed.colors.length]);
-  c.background.type = oneOf(c.background.type, ["shader", "soft", "cover", "solid", "image"], d.background.type);
+  c.background.type = oneOf(c.background.type, BACKGROUND_TYPES, d.background.type);
+  c.background.speed = clampNum(c.background.speed, 0, 2);
+  c.background.billboard = oneOf(c.background.billboard, ["cover", "lyrics"], d.background.billboard);
   c.background.shader.shape = oneOf(c.background.shader.shape, ["waterPlane", "plane", "sphere"], d.background.shader.shape);
   c.background.blur = clampNum(c.background.blur, 0, 60);
   c.background.dim = clampNum(c.background.dim, 0, 1);
@@ -262,10 +273,21 @@ export function normalizeContent(input: unknown): PartyContent {
  * expensive things to draw on a TV.
  */
 export function effectiveConfig(config: DisplayConfig, device: DeviceSettings): DisplayConfig {
-  if (!device.lowPower) return config;
-  return {
-    ...config,
-    background: { ...config.background, type: config.background.type === "shader" ? "soft" : config.background.type },
-    panels: { ...config.panels, style: config.panels.style === "glass" ? "solid" : config.panels.style },
-  };
+  let c = config;
+  // Night scenes are dark by nature: with color on Auto, use the dark theme so
+  // text and panels are light-on-dark instead of following a bright cover.
+  if (c.color.mode === "auto" && NIGHT_BACKGROUNDS.includes(c.background.type)) {
+    c = { ...c, color: { ...c.color, mode: "dark" } };
+  }
+  if (device.lowPower) {
+    c = {
+      ...c,
+      background: { ...c.background, type: c.background.type === "shader" ? "soft" : c.background.type },
+      panels: { ...c.panels, style: c.panels.style === "glass" ? "solid" : c.panels.style },
+    };
+  }
+  return c;
 }
+
+/** Backgrounds that are night scenes (see effectiveConfig). */
+export const NIGHT_BACKGROUNDS: BackgroundType[] = ["city", "billboard", "synthwave", "stars", "bokeh", "vinyl"];

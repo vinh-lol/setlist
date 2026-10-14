@@ -62,6 +62,14 @@ html, body {
   .party-bg-img { animation: partyFade 0.3s ease-out !important; }
 }
 
+/* Background scenes */
+.party-bg-fade { animation: partyFade 0.5s ease-out; }
+@keyframes vinylSpin { to { transform: rotate(360deg); } }
+.vinyl-spin { animation: vinylSpin 4s linear infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .vinyl-spin { animation: none; }
+}
+
 
 /* Liquid glass panels — backdrop refraction + SVG displacement (#lgDistort).
    The blurred/displaced backdrop lives on the ::before layer, NOT on .lg-panel
