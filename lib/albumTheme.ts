@@ -284,6 +284,11 @@ export function buildTheme(
     ink = ensureContrast(ink ?? (bgLight ? "#111111" : "#FAFAFA"), surface, 5.5);
   }
 
+  // A forced mode is a request for maximum legibility: near-white text on dark,
+  // near-black on light, keeping just a hint of the cover's hue.
+  if (mode === "dark") ink = tune(ink, 0.25, 93, 96);
+  else if (mode === "light") ink = tune(ink, 0.4, 8, 12);
+
   // Prefer the iconic standout color (from the wider candidate net) for the title
   // and accents; fall back to the role colors on truly monochrome covers.
   const vivid = pickVivid([...candidates, ...hexes]);
