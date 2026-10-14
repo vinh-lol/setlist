@@ -11,17 +11,14 @@
 // which fills missing keys from the defaults, so old saves keep working as the
 // schema grows.
 //
-// Wired today (Phase 1): background.shader, background.blur, background.dim,
-// color.transitionMs, lyrics.mode, panels.style (liquid | frosted),
-// panels.radius, widgets.upNext.count, widgets.clock, widgets.title.font,
-// lights.govee.enabled. The remaining fields are part of the contract and get
-// honored as the settings drawer lands (Phase 3); until then renderers fall
-// back to the default behavior.
+// Every field is honored by the renderers except layout.preset (only
+// "classic" exists so far: lyrics layout, or the hero layout when there are no
+// synced lyrics) and widgets.requestQr (arrives with the guest-request card).
 
 export type ColorSource = "album" | "fixed";
 export type ColorMode = "auto" | "dark" | "light";
 export type ColorIntensity = "muted" | "balanced" | "vivid";
-export type BackgroundType = "shader" | "cover" | "solid" | "image" | "off";
+export type BackgroundType = "shader" | "soft" | "cover" | "solid" | "image";
 export type ShaderShape = "waterPlane" | "plane" | "sphere";
 export type LyricsMode = "auto" | "always" | "off";
 export type LyricsReveal = "word" | "line";
@@ -36,8 +33,8 @@ export interface DisplayConfig {
   version: 1;
   color: {
     source: ColorSource;
-    /** Used when source = "fixed". */
-    fixed: { surface: string; ink: string; accent: string; gradient: string[] };
+    /** Used when source = "fixed": three colors the theme is built from, like a cover. */
+    fixed: { colors: string[] };
     mode: ColorMode;
     intensity: ColorIntensity;
     /** Fade between song themes, in ms. */
@@ -54,6 +51,7 @@ export interface DisplayConfig {
       brightness: number;
       grain: boolean;
     };
+    /** Used when type = "image". */
     imageUrl: string;
     /** Backdrop blur over the background, in px. */
     blur: number;
@@ -87,7 +85,10 @@ export interface DeviceSettings {
   /** Lyric timing offset in ms. Negative pulls lyrics later to match TV/speaker lag. */
   lyricOffsetMs: number;
   activePresetId: string;
+  /** Swap the WebGL shader and liquid glass for lighter options on weak TV browsers. */
   lowPower: boolean;
+  /** Ask the browser to keep the screen from sleeping while /party is open. */
+  keepAwake: boolean;
 }
 
 export interface InfoItem {
@@ -107,7 +108,7 @@ export const DEFAULT_CONFIG: DisplayConfig = {
   version: 1,
   color: {
     source: "album",
-    fixed: { surface: "#101014", ink: "#F5F5F5", accent: "#FF4D8D", gradient: ["#2B1055", "#7597DE", "#FF4D8D"] },
+    fixed: { colors: ["#2B1055", "#7597DE", "#FF4D8D"] },
     mode: "auto",
     intensity: "balanced",
     transitionMs: 700,
@@ -150,6 +151,7 @@ export const DEFAULT_DEVICE: DeviceSettings = {
   lyricOffsetMs: DEFAULT_LYRIC_OFFSET_MS,
   activePresetId: "classic",
   lowPower: false,
+  keepAwake: true,
 };
 
 export const DEFAULT_CONTENT: PartyContent = {
@@ -190,6 +192,8 @@ function mergeKnown<T>(base: T, input: unknown): T {
 const oneOf = <T extends string>(v: T, allowed: readonly T[], fallback: T): T =>
   allowed.includes(v) ? v : fallback;
 
+const isHex = (v: unknown): v is string => typeof v === "string" && /^#[0-9a-fA-F]{6}$/.test(v);
+
 const clampNum = (v: number, lo: number, hi: number) =>
   Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : lo;
 
@@ -203,7 +207,9 @@ export function normalizeConfig(input: unknown): DisplayConfig {
   c.color.intensity = oneOf(c.color.intensity, ["muted", "balanced", "vivid"], d.color.intensity);
   c.color.transitionMs = clampNum(c.color.transitionMs, 0, 5000);
 
-  c.background.type = oneOf(c.background.type, ["shader", "cover", "solid", "image", "off"], d.background.type);
+  c.color.fixed.colors = c.color.fixed.colors.filter(isHex).slice(0, 3);
+  while (c.color.fixed.colors.length < 3) c.color.fixed.colors.push(d.color.fixed.colors[c.color.fixed.colors.length]);
+  c.background.type = oneOf(c.background.type, ["shader", "soft", "cover", "solid", "image"], d.background.type);
   c.background.shader.shape = oneOf(c.background.shader.shape, ["waterPlane", "plane", "sphere"], d.background.shader.shape);
   c.background.blur = clampNum(c.background.blur, 0, 60);
   c.background.dim = clampNum(c.background.dim, 0, 1);
@@ -236,11 +242,27 @@ export function normalizeDevice(input: unknown): DeviceSettings {
 export function normalizeContent(input: unknown): PartyContent {
   const s = mergeKnown(structuredClone(DEFAULT_CONTENT), input);
   s.version = 1;
-  if (s.titleHeight !== null && !(typeof s.titleHeight === "number" && Number.isFinite(s.titleHeight))) {
+  // A height of 0 or less is never right (it came from measuring a detached
+  // textarea); treat it as unknown so the title re-measures.
+  if (s.titleHeight !== null && !(typeof s.titleHeight === "number" && Number.isFinite(s.titleHeight) && s.titleHeight > 0)) {
     s.titleHeight = null;
   }
   s.info = s.info
     .filter(isPlain)
     .map((r) => ({ label: String(r.label ?? ""), time: String(r.time ?? "") }));
   return s;
+}
+
+/**
+ * The config the display actually renders. Device settings can override the
+ * look without changing what's saved: low-power mode trades the WebGL shader
+ * for the CSS soft gradient and liquid glass for frosted.
+ */
+export function effectiveConfig(config: DisplayConfig, device: DeviceSettings): DisplayConfig {
+  if (!device.lowPower) return config;
+  return {
+    ...config,
+    background: { ...config.background, type: config.background.type === "shader" ? "soft" : config.background.type },
+    panels: { ...config.panels, style: config.panels.style === "liquid" ? "frosted" : config.panels.style },
+  };
 }

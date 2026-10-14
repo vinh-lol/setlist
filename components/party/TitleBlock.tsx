@@ -35,9 +35,15 @@ export default function TitleBlock({ halo, isFullscreen }: { halo: string; isFul
       return;
     }
     if (measuredFor.current === title) return;
+    let cancelled = false;
     const measure = () => {
+      // A late callback (fonts loading, next frame) can land after the layout
+      // swap removed this textarea; a detached element measures 0, which used
+      // to get saved and collapse the title. Ignore those.
+      if (cancelled || !el.isConnected) return;
       el.style.height = "auto";
       const h = el.scrollHeight;
+      if (h <= 0) return;
       el.style.height = `${h}px`;
       measuredFor.current = title;
       setContent({ titleHeight: h });
@@ -45,7 +51,7 @@ export default function TitleBlock({ halo, isFullscreen }: { halo: string; isFul
     measure();
     const raf = requestAnimationFrame(measure);
     document.fonts?.ready.then(measure).catch(() => {});
-    return () => cancelAnimationFrame(raf);
+    return () => { cancelled = true; cancelAnimationFrame(raf); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [title, loaded]);
 
@@ -54,11 +60,13 @@ export default function TitleBlock({ halo, isFullscreen }: { halo: string; isFul
     saveInfo(info.map((row, j) => (j === i ? { ...row, [field]: v } : row)));
   const addInfo = () => saveInfo([...info, { label: "", time: "" }]);
   const removeInfo = (i: number) => saveInfo(info.filter((_, j) => j !== i));
+  const { clock, title: titleW } = config.widgets;
 
   return (
     <motion.section layout layoutId="rightcol" transition={MORPH} className="flex flex-col min-h-0 gap-5">
       <div>
-        <DateClock className="mt-3 mb-1 space-y-0.5" clock={config.widgets.clock} />
+        {(clock.show || clock.date) && <DateClock className="mt-3 mb-1 space-y-0.5" clock={clock} />}
+        {titleW.show && (<>
         <textarea
           ref={titleRef}
           value={title}
@@ -68,17 +76,19 @@ export default function TitleBlock({ halo, isFullscreen }: { halo: string; isFul
           rows={1}
           className={`${editBase} font-black uppercase tracking-tight leading-[1.05] break-words text-5xl xl:text-6xl w-full resize-none overflow-hidden px-2 py-2`}
           style={{
-            fontFamily: config.widgets.title.font === "anton" ? "var(--font-display)" : "var(--font-sans)",
+            fontFamily: titleW.font === "anton" ? "var(--font-display)" : "var(--font-sans)",
             color: "var(--primary)",
             textShadow: halo,
             height: content.titleHeight ?? undefined,
           }}
         />
         <div className="w-10 border-t mt-5" style={{ borderColor: "var(--accent)" }} />
+        </>)}
       </div>
 
       {/* INFO (editable list) */}
-      <GlassPanel className="p-5" distort={config.panels.style !== "frosted"}>
+      {config.widgets.info && (
+      <GlassPanel className="p-5" panel={config.panels.style}>
         <div className="text-xs font-bold uppercase tracking-[0.12em] mb-3">Info</div>
         <div className="space-y-1.5">
           {info.map((row, i) => {
@@ -121,6 +131,7 @@ export default function TitleBlock({ halo, isFullscreen }: { halo: string; isFul
           )}
         </div>
       </GlassPanel>
+      )}
     </motion.section>
   );
 }

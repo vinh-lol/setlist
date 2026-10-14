@@ -54,6 +54,12 @@ export function fetchLyrics(track: SpotifyTrack): Promise<LyricsResult> {
   return p;
 }
 
+// Put known lyrics straight into the cache (used by demo mode's sample tracks,
+// which have no real lyrics to fetch).
+export function seedLyrics(track: SpotifyTrack, result: LyricsResult): void {
+  resolved.set(lyricsKey(track), result);
+}
+
 // Warm the cache for an upcoming track (fire-and-forget).
 export function prefetchLyrics(track: SpotifyTrack | null | undefined): void {
   if (track) void fetchLyrics(track);

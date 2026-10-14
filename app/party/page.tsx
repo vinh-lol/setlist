@@ -7,28 +7,33 @@
  *
  * This page only wires things together. The pieces live in:
  *   hooks/usePartyPlayback  current track, queue, position clock, transport
+ *   hooks/useDemoPlayback   sample songs for /party?demo (no Spotify needed)
  *   hooks/useAlbumTheme     album palette → theme, Govee light sync
  *   hooks/useDisplayConfig  saved look (DisplayConfig), device settings, title/info
- *   components/party/*      background, panels, layouts, widgets */
+ *   components/party/*      background, panels, layouts, widgets, settings drawer */
 
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Anton, Inter } from "next/font/google";
 import { LayoutGroup, MotionConfig } from "framer-motion";
 import { rgba } from "@/lib/albumTheme";
 import type { LyricLine } from "@/lib/lyrics";
-import { panelClass, textHalo, themeCssVars } from "@/lib/display/theme";
+import { effectiveConfig } from "@/lib/display/config";
+import { LYRIC_SCALE, panelClass, textHalo, themeCssVars } from "@/lib/display/theme";
 import { DisplayConfigProvider, useDisplayConfig } from "@/hooks/useDisplayConfig";
 import { usePartyPlayback } from "@/hooks/usePartyPlayback";
+import { useDemoPlayback } from "@/hooks/useDemoPlayback";
 import { useAlbumTheme, useGoveeSync } from "@/hooks/useAlbumTheme";
 import { useLyricOffsetKeys } from "@/hooks/useLyricOffsetKeys";
 import { useFullscreen } from "@/hooks/useFullscreen";
+import { useIdle } from "@/hooks/useIdle";
+import { useWakeLock } from "@/hooks/useWakeLock";
 import { useLyrics } from "@/hooks/useLyrics";
 import PartyLyrics from "@/components/PartyLyrics";
 import GlassFilterDefs from "@/components/party/GlassFilterDefs";
 import DisplayBackground from "@/components/party/DisplayBackground";
-import FullscreenButton from "@/components/party/FullscreenButton";
+import CornerControls from "@/components/party/CornerControls";
 import LyricOffsetToast from "@/components/party/LyricOffsetToast";
 import AlbumArt from "@/components/party/AlbumArt";
 import NowPlayingCard from "@/components/party/NowPlayingCard";
@@ -37,9 +42,12 @@ import TitleBlock from "@/components/party/TitleBlock";
 import UpNextBar from "@/components/party/UpNextBar";
 import ClassicLayout from "@/components/party/layouts/ClassicLayout";
 import HeroLayout from "@/components/party/layouts/HeroLayout";
+import SettingsDrawer from "@/components/party/settings/SettingsDrawer";
 
 const display = Anton({ weight: "400", subsets: ["latin"], variable: "--font-display" });
 const sans = Inter({ subsets: ["latin"], variable: "--font-sans" });
+
+const IDLE_MS = 3000;
 
 function activeLineIdx(lines: LyricLine[] | null, positionMs: number) {
   if (!lines) return -1;
@@ -50,6 +58,11 @@ function activeLineIdx(lines: LyricLine[] | null, positionMs: number) {
   }
   return idx;
 }
+
+const isTyping = (t: EventTarget | null) => {
+  const el = t as HTMLElement | null;
+  return !!el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
+};
 
 export default function PartyPage() {
   return (
@@ -63,26 +76,52 @@ function PartyDashboard() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const token = session?.accessToken ?? "";
-  const { config, device, setDevice } = useDisplayConfig();
+  const { config: savedConfig, device, setDevice } = useDisplayConfig();
+  const config = effectiveConfig(savedConfig, device);
+
+  // /party?demo plays sample songs instead of Spotify and works signed out.
+  // Read after mount (null until then) so server and client render the same.
+  const [demo, setDemo] = useState<boolean | null>(null);
+  useEffect(() => setDemo(new URLSearchParams(window.location.search).has("demo")), []);
 
   useEffect(() => {
-    if (status === "unauthenticated") router.push("/");
-  }, [status, router]);
+    if (demo === false && status === "unauthenticated") router.push("/");
+  }, [demo, status, router]);
 
-  const playback = usePartyPlayback(token);
+  const live = usePartyPlayback(demo ? "" : token);
+  const sample = useDemoPlayback(!!demo);
+  const playback = demo ? sample : live;
   const { current, upcoming, positionMs } = playback;
-  const theme = useAlbumTheme(current?.albumArt);
-  useGoveeSync(theme, config.lights.govee.enabled);
+  const theme = useAlbumTheme(current?.albumArt, config.color);
+  useGoveeSync(theme, config.lights.govee);
+  useWakeLock(device.keepAwake);
   const { isFullscreen, toggle: toggleFullscreen } = useFullscreen();
+
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const idle = useIdle(IDLE_MS);
+  const chromeHidden = idle && !settingsOpen; // hide cursor + corner buttons
+
+  // S = settings, F = fullscreen, Esc = close settings.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (isTyping(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
+      const k = e.key.toLowerCase();
+      if (k === "s") { e.preventDefault(); setSettingsOpen((o) => !o); }
+      else if (k === "f") { e.preventDefault(); toggleFullscreen(); }
+      else if (e.key === "Escape") setSettingsOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [toggleFullscreen]);
 
   // Lyric timing offset (device.lyricOffsetMs), in ms. Spotify reports the
   // *stream* position, but on a TV / BT speaker / Spotify Connect target the
   // sound you actually hear lags that by the device's output + buffering
   // latency — so the lyrics drift ahead. The -600ms default pulls them back;
-  // live-tune with ← / → at the venue.
+  // live-tune with ← / → at the venue (off while the settings drawer is open).
   const lyricLead = device.lyricOffsetMs;
   const setLyricLead = useCallback((ms: number) => setDevice({ lyricOffsetMs: ms }), [setDevice]);
-  const leadToast = useLyricOffsetKeys(lyricLead, setLyricLead);
+  const leadToast = useLyricOffsetKeys(lyricLead, setLyricLead, !settingsOpen);
 
   const lyrics = useLyrics(current);
   const lyricPos = positionMs + lyricLead;
@@ -97,24 +136,41 @@ function PartyDashboard() {
   const upNextCount = config.widgets.upNext.count;
   const maxUpNext = upNextCount === "auto" ? (showLyrics ? 5 : 6) : upNextCount;
 
-  if (status === "loading") {
+  if (demo === null || (!demo && status === "loading")) {
     return <div className="flex items-center justify-center h-screen bg-white text-black/40 text-sm">Loading…</div>;
   }
 
+  const w = config.widgets;
   const halo = textHalo(theme);
   const glass = panelClass(config.panels.style);
-  const side = <TitleBlock halo={halo} isFullscreen={isFullscreen} />;
+  const hasSide = w.clock.show || w.clock.date || w.title.show || w.info;
+  const side = hasSide ? <TitleBlock halo={halo} isFullscreen={isFullscreen} /> : null;
   const cover = <AlbumArt track={current} theme={theme} />;
+  // Upcoming (not yet sung) lyric words; brighter on forced dark so they don't sink.
+  const faint = rgba(theme.ink, config.color.mode === "dark" ? 0.5 : 0.28);
 
   return (
     <div
       className={`${display.variable} ${sans.variable} relative h-screen w-screen overflow-hidden flex flex-col transition-colors`}
-      style={themeCssVars(theme, config)}
+      style={{ ...themeCssVars(theme, config), cursor: chromeHidden ? "none" : undefined }}
     >
       <GlassFilterDefs />
-      <DisplayBackground theme={theme} background={config.background} />
-      <FullscreenButton isFullscreen={isFullscreen} onToggle={toggleFullscreen} />
+      <DisplayBackground theme={theme} background={config.background} albumArt={current?.albumArt} colorMode={config.color.mode} />
+      <CornerControls
+        hidden={chromeHidden}
+        isFullscreen={isFullscreen}
+        onToggleFullscreen={toggleFullscreen}
+        onOpenSettings={() => setSettingsOpen(true)}
+      />
       <LyricOffsetToast visible={leadToast} offsetMs={lyricLead} theme={theme} />
+      {demo && (
+        <div
+          className="absolute top-4 left-4 z-30 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-opacity duration-500"
+          style={{ background: rgba(theme.ink, 0.08), color: rgba(theme.ink, 0.7), opacity: chromeHidden ? 0 : 1 }}
+        >
+          Demo · sample songs
+        </div>
+      )}
 
       {/* Top region — lyrics layout (3-col) morphs to/from hero layout (cover +
           one long player bubble). Framer Motion shared-layout (layoutId) slides
@@ -128,9 +184,22 @@ function PartyDashboard() {
               radius={config.panels.radius}
               halo={halo}
               cover={cover}
-              nowPlaying={<NowPlayingCard track={current} />}
-              transport={<Transport playback={playback} />}
-              lyrics={<PartyLyrics lines={lyrics.synced} activeIdx={aIdx} positionMs={lyricPos} plain={lyrics.plain} loading={lyrics.loading} accent={theme.lyric} faint={rgba(theme.ink, 0.28)} />}
+              nowPlaying={w.nowPlaying ? <NowPlayingCard track={current} /> : null}
+              transport={w.transport ? <Transport playback={playback} /> : null}
+              lyrics={
+                <PartyLyrics
+                  lines={lyrics.synced}
+                  activeIdx={aIdx}
+                  positionMs={lyricPos}
+                  plain={lyrics.plain}
+                  loading={lyrics.loading}
+                  accent={theme.lyric}
+                  faint={faint}
+                  reveal={config.lyrics.reveal}
+                  scale={LYRIC_SCALE[config.lyrics.size]}
+                  fontKey={config.lyrics.font}
+                />
+              }
               side={side}
             />
           ) : (
@@ -138,8 +207,8 @@ function PartyDashboard() {
               key="hero-layout"
               glass={glass}
               cover={cover}
-              nowPlaying={<NowPlayingCard track={current} big />}
-              transport={<Transport playback={playback} big />}
+              nowPlaying={w.nowPlaying ? <NowPlayingCard track={current} big /> : null}
+              transport={w.transport ? <Transport playback={playback} big /> : null}
               side={side}
             />
           )}
@@ -147,7 +216,11 @@ function PartyDashboard() {
       </MotionConfig>
 
       {/* BOTTOM — up next, floating glass bar */}
-      <UpNextBar upcoming={upcoming} max={maxUpNext} roomy={!showLyrics} distort={config.panels.style !== "frosted"} />
+      {w.upNext.show && maxUpNext > 0 && (
+        <UpNextBar upcoming={upcoming} max={maxUpNext} roomy={!showLyrics} panel={config.panels.style} />
+      )}
+
+      <SettingsDrawer open={settingsOpen} onClose={() => setSettingsOpen(false)} theme={theme} />
     </div>
   );
 }

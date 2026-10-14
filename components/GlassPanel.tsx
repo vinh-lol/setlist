@@ -1,22 +1,25 @@
 import type { CSSProperties, ReactNode } from "react";
+import { panelClass } from "@/lib/display/theme";
+import type { PanelStyle } from "@/lib/display/config";
 
-// Liquid-glass surface: real-time refraction of whatever is behind it via
+// Glass surface: real-time refraction of whatever is behind it via
 // backdrop-filter (blur + saturate) plus an SVG displacement filter (#lgDistort)
-// for the wobbly "liquid" edges. Degrades to a frosted panel where url() filters
-// in backdrop-filter aren't supported.
+// for the wobbly "liquid" edges. `panel` picks the treatment (liquid, frosted,
+// solid, none); liquid degrades to frosted where url() filters in
+// backdrop-filter aren't supported.
 export default function GlassPanel({
   children,
   className = "",
   style,
-  distort = true,
+  panel = "liquid",
 }: {
   children: ReactNode;
   className?: string;
   style?: CSSProperties;
-  distort?: boolean;
+  panel?: PanelStyle;
 }) {
   return (
-    <div className={`lg-panel ${distort ? "lg-distort" : ""} ${className}`} style={style}>
+    <div className={`${panelClass(panel)} ${className}`} style={style}>
       {children}
     </div>
   );
