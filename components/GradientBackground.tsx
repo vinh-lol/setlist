@@ -1,10 +1,21 @@
 "use client";
 
 import { ShaderGradientCanvas, ShaderGradient } from "@shadergradient/react";
+import { DEFAULT_CONFIG, type DisplayConfig } from "@/lib/display/config";
+
+type ShaderSettings = DisplayConfig["background"]["shader"];
 
 // Full-screen animated gradient (ShaderGradient / three.js) coloured from the
 // album cover. Client-only (rendered behind the dashboard via dynamic ssr:false).
-export default function GradientBackground({ colors }: { colors: string[] }) {
+// Shape, motion and lighting come from the display config (background.shader);
+// camera and rotation stay fixed to the original framing.
+export default function GradientBackground({
+  colors,
+  shader = DEFAULT_CONFIG.background.shader,
+}: {
+  colors: string[];
+  shader?: ShaderSettings;
+}) {
   const [c1, c2, c3] = colors;
   if (!c1) return null;
 
@@ -14,15 +25,15 @@ export default function GradientBackground({ colors }: { colors: string[] }) {
     >
       <ShaderGradient
         control="props"
-        type="waterPlane"
+        type={shader.shape}
         color1={c1}
         color2={c2 ?? c1}
         color3={c3 ?? c2 ?? c1}
-        animate="on"
-        uSpeed={0.3}
-        uStrength={1.6}
-        uDensity={1.5}
-        uFrequency={5.5}
+        animate={shader.speed > 0 ? "on" : "off"}
+        uSpeed={shader.speed}
+        uStrength={shader.strength}
+        uDensity={shader.density}
+        uFrequency={shader.frequency}
         cDistance={3.6}
         cPolarAngle={120}
         cAzimuthAngle={180}
@@ -33,9 +44,9 @@ export default function GradientBackground({ colors }: { colors: string[] }) {
         rotationX={50}
         rotationY={0}
         rotationZ={-60}
-        grain="off"
+        grain={shader.grain ? "on" : "off"}
         lightType="3d"
-        brightness={1.1}
+        brightness={shader.brightness}
         reflection={0.1}
       />
     </ShaderGradientCanvas>

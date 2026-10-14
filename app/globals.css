@@ -74,7 +74,7 @@ html, body {
   isolation: isolate;       /* contain the z-index:-1 backdrop layer */
   overflow: hidden;         /* clips the ::before backdrop to the rounded shape */
   border: 1px solid var(--glass-rim, rgba(255, 255, 255, 0.22));
-  border-radius: 26px;
+  border-radius: var(--panel-radius, 26px);
   box-shadow:
     0 14px 44px rgba(0, 0, 0, 0.22),
     inset 0 1px 0 rgba(255, 255, 255, 0.40),
