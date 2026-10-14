@@ -11,6 +11,9 @@ interface Props {
   loading: boolean;
   accent: string; // album accent for revealed words
   faint: string;  // ink-derived low-alpha for pending words (legible on dark themes)
+  reveal?: "word" | "line"; // word = build word by word; line = whole line lights at once
+  scale?: number; // lyric size multiplier (1 = original size)
+  fontKey?: string; // changes when the lyric font changes, to re-measure line heights
 }
 
 const FADE_MASK = "linear-gradient(to bottom, transparent, black 4%, black 90%, transparent)";
@@ -30,7 +33,7 @@ function Empty({ children }: { children: React.ReactNode }) {
 // line reveals word-by-word (faint → accent). When a line finishes, the stack
 // slides up: the just-played line fades out the top while the next slides into the
 // current slot and a new next fades in below.
-export default function PartyLyrics({ lines, activeIdx, positionMs, plain, loading, accent, faint }: Props) {
+export default function PartyLyrics({ lines, activeIdx, positionMs, plain, loading, accent, faint, reveal = "word", scale = 1, fontKey = "" }: Props) {
   const vpRef = useRef<HTMLDivElement>(null);
   const lineRefs = useRef<(HTMLDivElement | null)[]>([]);
   const [ty, setTy] = useState(0);
@@ -60,9 +63,10 @@ export default function PartyLyrics({ lines, activeIdx, positionMs, plain, loadi
       setMaxRel(last);
     };
     measure();
+    document.fonts?.ready.then(measure).catch(() => {}); // a newly picked font may still be loading
     window.addEventListener("resize", measure);
     return () => window.removeEventListener("resize", measure);
-  }, [idx, lines]);
+  }, [idx, lines, scale, fontKey]);
 
   if (loading) return <Empty>loading lyrics</Empty>;
 
@@ -90,6 +94,7 @@ export default function PartyLyrics({ lines, activeIdx, positionMs, plain, loadi
       if (frac >= acc / totalW) curRevealed = i + 1; else break;
       acc += wlens[i];
     }
+    if (reveal === "line") curRevealed = started ? curWords.length : 0;
 
     return (
       <div ref={vpRef} className="relative h-full overflow-hidden" style={{ maskImage: FADE_MASK, WebkitMaskImage: FADE_MASK }}>
@@ -109,7 +114,7 @@ export default function PartyLyrics({ lines, activeIdx, positionMs, plain, loadi
                 className="px-6 py-2.5 transition-opacity duration-[420ms] ease-out motion-reduce:transition-none"
                 style={{ opacity: visible ? 1 : 0 }}
               >
-                <p className="uppercase leading-[0.95] tracking-tight text-[clamp(2.25rem,4.6vw,4.5rem)]" style={{ fontFamily: "var(--font-lyric)" }}>
+                <p className="uppercase leading-[0.95] tracking-tight" style={{ fontFamily: "var(--font-lyric)", fontSize: `calc(clamp(2.25rem, 4.6vw, 4.5rem) * ${scale})` }}>
                   {words.map((w, wi) => (
                     <span
                       key={wi}

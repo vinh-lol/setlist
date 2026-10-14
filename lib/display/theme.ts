@@ -6,11 +6,25 @@ import { rgba, type AlbumTheme } from "@/lib/albumTheme";
 import { hexToRgb } from "@/lib/huelix-palette-toolkit";
 import type { DisplayConfig, PanelStyle } from "./config";
 
-// Glass treatment per panel style. "solid" and "none" arrive with the settings
-// drawer (Phase 3); until then they render as liquid glass.
+// Panel treatment per style (see .lg-panel and friends in globals.css):
+// liquid = blur + SVG edge distortion, frosted = blur only (much lighter on
+// TV GPUs), solid = opaque surface tint, none = no panel at all.
+const PANEL_CLASS: Record<PanelStyle, string> = {
+  liquid: "lg-panel lg-distort",
+  frosted: "lg-panel",
+  solid: "lg-panel lg-solid",
+  none: "lg-panel lg-bare",
+};
 export function panelClass(style: PanelStyle): string {
-  return style === "frosted" ? "lg-panel" : "lg-panel lg-distort";
+  return PANEL_CLASS[style];
 }
+
+const LYRIC_FONT: Record<DisplayConfig["lyrics"]["font"], string | undefined> = {
+  bitcount: undefined, // keep the :root default (Bitcount Single)
+  anton: "var(--font-display)",
+  inter: "var(--font-sans)",
+};
+export const LYRIC_SCALE: Record<DisplayConfig["lyrics"]["size"], number> = { s: 0.8, m: 1, l: 1.25 };
 
 // A halo in the tone opposite the ink, so bare text stays legible over the
 // live gradient (light glow under dark text, dark glow under light text).
@@ -44,6 +58,9 @@ export function themeCssVars(theme: AlbumTheme, config: DisplayConfig): CSSPrope
     "--ink-05": rgba(theme.ink, 0.05),
     "--glass-tint": rgba(theme.surface, 0.34),
     "--glass-rim": "rgba(255,255,255,0.22)",
+    "--surface": theme.surface,
+    "--panel-solid": rgba(theme.surface, 0.9),
+    ...(LYRIC_FONT[config.lyrics.font] ? { "--font-lyric": LYRIC_FONT[config.lyrics.font] } : {}),
     "--panel-radius": `${config.panels.radius}px`,
     transitionDuration: `${config.color.transitionMs}ms`,
   } as CSSProperties;

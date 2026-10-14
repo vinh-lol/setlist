@@ -1,6 +1,7 @@
 import GlassPanel from "@/components/GlassPanel";
 import { formatDuration } from "@/lib/timeline";
 import type { SpotifyTrack } from "@/lib/types";
+import type { PanelStyle } from "@/lib/display/config";
 
 // Floating glass bar along the bottom. `roomy` = hero layout (no lyrics), which
 // gets one more column and slightly bigger covers.
@@ -8,16 +9,16 @@ export default function UpNextBar({
   upcoming,
   max,
   roomy,
-  distort,
+  panel,
 }: {
   upcoming: SpotifyTrack[];
   max: number;
   roomy: boolean;
-  distort: boolean;
+  panel: PanelStyle;
 }) {
   return (
     <div className="relative z-10 px-8 lg:px-10 pb-6">
-      <GlassPanel className="px-6 py-4 flex items-center gap-8" distort={distort}>
+      <GlassPanel className="px-6 py-4 flex items-center gap-8" panel={panel}>
         <div className="flex items-center gap-3 shrink-0 text-sm font-bold uppercase tracking-[0.1em]">
           Up Next <span className="text-[color:var(--ink-40)]">→</span>
         </div>

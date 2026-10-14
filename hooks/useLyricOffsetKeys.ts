@@ -9,11 +9,12 @@ import { useEffect, useRef, useState } from "react";
 
 const LEAD_STEP_MS = 100;
 
-export function useLyricOffsetKeys(offsetMs: number, setOffsetMs: (ms: number) => void): boolean {
+export function useLyricOffsetKeys(offsetMs: number, setOffsetMs: (ms: number) => void, enabled = true): boolean {
   const [toast, setToast] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    if (!enabled) return;
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
       if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
@@ -30,7 +31,7 @@ export function useLyricOffsetKeys(offsetMs: number, setOffsetMs: (ms: number) =
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [offsetMs, setOffsetMs]);
+  }, [offsetMs, setOffsetMs, enabled]);
 
   return toast;
 }

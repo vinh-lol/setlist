@@ -96,6 +96,22 @@ html, body {
   -webkit-backdrop-filter: blur(12px) saturate(180%) url(#lgDistort);
   backdrop-filter: blur(12px) saturate(180%) url(#lgDistort);
 }
+/* Solid: an opaque surface-tinted card, no backdrop work at all. */
+.lg-panel.lg-solid::before {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background: var(--panel-solid, rgba(255, 255, 255, 0.9));
+}
+/* None: content floats straight on the background (text keeps its halo). */
+.lg-panel.lg-bare {
+  border-color: transparent;
+  box-shadow: none;
+}
+.lg-panel.lg-bare::before,
+.lg-panel.lg-bare::after {
+  display: none;
+}
+
 /* Specular sheen sweeping the top edge. */
 .lg-panel::after {
   content: "";

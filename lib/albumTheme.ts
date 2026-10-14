@@ -226,12 +226,41 @@ export function analyzeAlbum(
   });
 }
 
+export interface ThemeOptions {
+  /** auto = light or dark from the cover; dark/light force the surface. */
+  mode?: "auto" | "dark" | "light";
+  /** How saturated the surface and background gradient are. */
+  intensity?: "muted" | "balanced" | "vivid";
+}
+
+// Surface desaturation per intensity ("balanced" is the original 0.55).
+const SURFACE_SAT = { muted: 0.35, balanced: 0.55, vivid: 0.8 } as const;
+// Gradient saturation multiplier per intensity ("balanced" leaves it untouched).
+const GRADIENT_SAT = { muted: 0.6, balanced: 1, vivid: 1.3 } as const;
+
+// Same hue and saturation, new lightness.
+function withLightness(hex: string, l: number): string {
+  const c = hexToRgb(hex) ?? { r: 0, g: 0, b: 0 };
+  const { h, s } = rgbToHsl(c.r, c.g, c.b);
+  return hslToHex(h, s, l);
+}
+
+// Scale saturation (capped at 100) and keep lightness inside [lo, hi].
+function tune(hex: string, satFactor: number, lo = 0, hi = 100): string {
+  const c = hexToRgb(hex) ?? { r: 0, g: 0, b: 0 };
+  const { h, s, l } = rgbToHsl(c.r, c.g, c.b);
+  return hslToHex(h, clamp(s * satFactor, 0, 100), clamp(l, lo, hi));
+}
+
 export function buildTheme(
   hexes: string[],
   candidates: string[] = [],
   counts: { hex: string; n: number }[] = [],
+  opts: ThemeOptions = {},
 ): AlbumTheme {
   if (!hexes.length) return DEFAULT_THEME;
+  const mode = opts.mode ?? "auto";
+  const intensity = opts.intensity ?? "balanced";
 
   const hierarchy = computeColorHierarchy(hexes);
   const roles = assignColorRoles(hexes);
@@ -244,7 +273,9 @@ export function buildTheme(
   // Surface: the toolkit's Surface role (lightest tone) or the lightest available,
   // tamed so a saturated cover doesn't become a neon canvas.
   let surface = byRole("Surface") ?? lightest;
-  surface = desaturate(surface, 0.55);
+  surface = desaturate(surface, SURFACE_SAT[intensity]);
+  if (mode === "dark") surface = withLightness(surface, 9);
+  else if (mode === "light") surface = withLightness(surface, 95);
   const bgLight = srgbLum(surface) > 0.45;
 
   // Ink: Body text role if it reads on the surface, else the opposite extreme.
@@ -262,7 +293,13 @@ export function buildTheme(
   const primary = ensureContrast(primaryRaw, surface, 3.6);
   const support = byRole("Support") ?? ink;
   const lyric = lyricize(accentRaw); // from the vivid pick, before contrast-darkening
-  const gradient = gradientColors(hexes, candidates, accent, counts.length ? counts : hexes.map((hex) => ({ hex, n: 1 })));
+  const rawGradient = gradientColors(hexes, candidates, accent, counts.length ? counts : hexes.map((hex) => ({ hex, n: 1 })));
+  // Dark keeps the moving background deep, light keeps it airy, so the panels
+  // and text that were tuned for the forced surface still sit right on top.
+  const [lo, hi] = mode === "dark" ? [0, 30] : mode === "light" ? [72, 100] : [0, 100];
+  const gradient = mode === "auto" && intensity === "balanced"
+    ? rawGradient // untouched: keeps the default look byte-for-byte
+    : rawGradient.map((h) => tune(h, GRADIENT_SAT[intensity], lo, hi));
 
   return { surface, ink, primary, accent, lyric, support, gradient, palette: hexes, hierarchy };
 }
