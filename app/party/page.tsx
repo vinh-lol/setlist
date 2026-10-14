@@ -22,6 +22,8 @@ import type { LyricLine } from "@/lib/lyrics";
 import { hexToRgb } from "@/lib/huelix-palette-toolkit";
 import PartyLyrics from "@/components/PartyLyrics";
 import GlassPanel from "@/components/GlassPanel";
+import { DisplayConfigProvider, useDisplayConfig } from "@/hooks/useDisplayConfig";
+import type { DisplayConfig, InfoItem, PanelStyle } from "@/lib/display/config";
 
 const display = Anton({ weight: "400", subsets: ["latin"], variable: "--font-display" });
 const sans = Inter({ subsets: ["latin"], variable: "--font-sans" });
@@ -29,29 +31,23 @@ const sans = Inter({ subsets: ["latin"], variable: "--font-sans" });
 // WebGL/three — client only.
 const GradientBackground = dynamic(() => import("@/components/GradientBackground"), { ssr: false });
 
-interface InfoItem { label: string; time: string; }
-
-const K_TITLE = "party-title";
-const K_TITLE_H = "party-title-h";
-const K_INFO = "party-info";
-const K_LYRIC_LEAD = "party-lyric-lead";
-
-// Offset applied to lyric timing, in ms. 0 = track the (latency-compensated)
-// playback position exactly. Positive = lyrics run ahead of the audio, negative
-// = lyrics run behind. Spotify reports the *stream* position, but on a TV / BT
-// speaker / Spotify Connect target the sound you actually hear lags that by the
-// device's output + buffering latency — so the lyrics drift ahead. A negative
-// default pulls them back; live-tune with ← / → at the venue (see below).
-const DEFAULT_LYRIC_LEAD_MS = -600;
+// Lyric timing offset (device.lyricOffsetMs), in ms. 0 = track the
+// (latency-compensated) playback position exactly. Positive = lyrics run ahead
+// of the audio, negative = lyrics run behind. Spotify reports the *stream*
+// position, but on a TV / BT speaker / Spotify Connect target the sound you
+// actually hear lags that by the device's output + buffering latency — so the
+// lyrics drift ahead. The -600ms default pulls them back; live-tune with ← / →
+// at the venue (see below).
 const LEAD_STEP_MS = 100;
 
 // Shared spring-ish tween for the layout morph (panels sliding/resizing between
 // the lyrics layout and the hero layout).
 const MORPH: Transition = { duration: 0.55, ease: [0.22, 1, 0.36, 1] };
-const GLASS = "lg-panel lg-distort";
 
-function ls(key: string, val: string) {
-  try { localStorage.setItem(key, val); } catch {}
+// Glass treatment per panel style. "solid" and "none" arrive with the settings
+// drawer (Phase 3); until then they render as liquid glass.
+function panelClass(style: PanelStyle): string {
+  return style === "frosted" ? "lg-panel" : "lg-panel lg-distort";
 }
 
 // A halo in the tone opposite the ink, so bare text stays legible over the
@@ -79,13 +75,15 @@ const ordinal = (n: number) => {
 };
 const fmtPartyDate = (d: Date) =>
   `${d.toLocaleDateString("en-US", { weekday: "long" })} ${d.toLocaleDateString("en-US", { month: "long" })} ${d.getDate()}${ordinal(d.getDate())}`.toUpperCase();
-// 24-hour "10:42:12".
-const fmtClock = (d: Date) =>
-  d.toLocaleTimeString("en-GB", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
+// Default "10:42:12" (24-hour with seconds); widgets.clock picks 12h / no seconds.
+const fmtClock = (d: Date, clock: DisplayConfig["widgets"]["clock"]) =>
+  clock.hour12
+    ? d.toLocaleTimeString("en-US", { hour12: true, hour: "numeric", minute: "2-digit", ...(clock.seconds ? { second: "2-digit" } : {}) })
+    : d.toLocaleTimeString("en-GB", { hour12: false, hour: "2-digit", minute: "2-digit", ...(clock.seconds ? { second: "2-digit" } : {}) });
 
 // Live date + clock shown above the title. Self-contained so its per-second tick
 // only re-renders this block, not the whole dashboard.
-function DateClock({ className }: { className?: string }) {
+function DateClock({ className, clock }: { className?: string; clock: DisplayConfig["widgets"]["clock"] }) {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000);
@@ -93,36 +91,44 @@ function DateClock({ className }: { className?: string }) {
   }, []);
   return (
     <div className={className} suppressHydrationWarning>
-      <div className="text-xs font-bold uppercase tracking-[0.12em] px-2 tabular-nums">{fmtClock(now)}</div>
-      <div className="text-xs font-bold uppercase tracking-[0.12em] px-2">{fmtPartyDate(now)}</div>
+      {clock.show && <div className="text-xs font-bold uppercase tracking-[0.12em] px-2 tabular-nums">{fmtClock(now, clock)}</div>}
+      {clock.date && <div className="text-xs font-bold uppercase tracking-[0.12em] px-2">{fmtPartyDate(now)}</div>}
     </div>
   );
 }
 
 export default function PartyPage() {
+  return (
+    <DisplayConfigProvider>
+      <PartyDashboard />
+    </DisplayConfigProvider>
+  );
+}
+
+function PartyDashboard() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const token = session?.accessToken ?? "";
+  const { config, device, content, loaded, setDevice, setContent } = useDisplayConfig();
 
   const [queue, setQueue] = useState<SpotifyTrack[]>([]);
   const [positionMs, setPositionMs] = useState(0);
   const [theme, setTheme] = useState<AlbumTheme>(DEFAULT_THEME);
   const [optimisticPlaying, setOptimisticPlaying] = useState<boolean | null>(null);
 
-  // Editable dashboard copy
-  const [title, setTitle] = useState("");
-  const [info, setInfo] = useState<InfoItem[]>([]);
+  // Editable dashboard copy (persisted via the display config's PartyContent).
+  const { title, info } = content;
   const titleRef = useRef<HTMLTextAreaElement>(null);
   const measuredFor = useRef<string | null>(null);
   // Auto-grown title height, persisted so it stays constant across the
   // lyrics/hero layout swap and across reloads (see the measure effect below).
-  const [titleH, setTitleH] = useState<number>();
+  const titleH = content.titleHeight ?? undefined;
 
   const [isFullscreen, setIsFullscreen] = useState(false);
 
-  // Live-tunable lyric timing offset (ms). Persisted so a dialled-in venue
-  // setting survives reloads. `leadToast` briefly shows the value while nudging.
-  const [lyricLead, setLyricLead] = useState(DEFAULT_LYRIC_LEAD_MS);
+  // Live-tunable lyric timing offset (ms). Persisted per device so a dialled-in
+  // venue setting survives reloads. `leadToast` briefly shows the value while nudging.
+  const lyricLead = device.lyricOffsetMs;
   const [leadToast, setLeadToast] = useState(false);
   const leadToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -133,25 +139,6 @@ export default function PartyPage() {
   useEffect(() => {
     if (status === "unauthenticated") router.push("/");
   }, [status, router]);
-
-  // Load editable copy
-  useEffect(() => {
-    try {
-      const savedTitle = localStorage.getItem(K_TITLE) ?? localStorage.getItem("party-custom-text") ?? "";
-      setTitle(savedTitle);
-      const savedH = localStorage.getItem(K_TITLE_H);
-      if (savedH !== null && !Number.isNaN(Number(savedH))) {
-        setTitleH(Number(savedH));
-        measuredFor.current = savedTitle; // height already matches this text — don't re-measure on mount
-      }
-      const raw = localStorage.getItem(K_INFO);
-      setInfo(raw ? JSON.parse(raw) : [{ label: "", time: "" }]);
-      const lead = localStorage.getItem(K_LYRIC_LEAD);
-      if (lead !== null && !Number.isNaN(Number(lead))) setLyricLead(Number(lead));
-    } catch {
-      setInfo([{ label: "", time: "" }]);
-    }
-  }, []);
 
   // Live lyric-sync nudge: ← pulls lyrics later (more behind the audio), →
   // pushes them earlier. ↓/0 resets. Lets you dial out TV/speaker output lag at
@@ -166,15 +153,14 @@ export default function PartyPage() {
       else if (e.key === "ArrowDown" || e.key === "0") next = 0;
       if (next === null) return;
       e.preventDefault();
-      setLyricLead(next);
-      ls(K_LYRIC_LEAD, String(next));
+      setDevice({ lyricOffsetMs: next });
       setLeadToast(true);
       if (leadToastTimer.current) clearTimeout(leadToastTimer.current);
       leadToastTimer.current = setTimeout(() => setLeadToast(false), 1600);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [lyricLead]);
+  }, [lyricLead, setDevice]);
 
   // Auto-grow the title textarea to fit its wrapped lines, but treat the result
   // as a persisted constant. We only re-measure when the title *text* changes —
@@ -183,27 +169,34 @@ export default function PartyPage() {
   // measuring mid-morph used to clamp a 3-line title back to 1 line. Skipping the
   // measure when the text is unchanged means the height set when you typed the
   // title just stays — across the transition and across reloads (seeded from
-  // localStorage in the load effect). `measuredFor` tracks the text the current
-  // height belongs to.
+  // storage when the display config loads). `measuredFor` tracks the text the
+  // current height belongs to.
   useEffect(() => {
     const el = titleRef.current;
-    if (!el || measuredFor.current === title) return;
+    if (!el || !loaded) return;
+    // First pass after loading: a saved height already matches the saved text,
+    // so adopt it instead of re-measuring on mount.
+    if (measuredFor.current === null && content.titleHeight !== null) {
+      measuredFor.current = title;
+      return;
+    }
+    if (measuredFor.current === title) return;
     const measure = () => {
       el.style.height = "auto";
       const h = el.scrollHeight;
       el.style.height = `${h}px`;
-      setTitleH(h);
       measuredFor.current = title;
-      ls(K_TITLE_H, String(h));
+      setContent({ titleHeight: h });
     };
     measure();
     const raf = requestAnimationFrame(measure);
     document.fonts?.ready.then(measure).catch(() => {});
     return () => cancelAnimationFrame(raf);
-  }, [title]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [title, loaded]);
 
-  const saveTitle = (v: string) => { setTitle(v); ls(K_TITLE, v); };
-  const saveInfo = (next: InfoItem[]) => { setInfo(next); ls(K_INFO, JSON.stringify(next)); };
+  const saveTitle = (v: string) => setContent({ title: v });
+  const saveInfo = (next: InfoItem[]) => setContent({ info: next });
   const updateInfo = (i: number, field: keyof InfoItem, v: string) =>
     saveInfo(info.map((row, j) => (j === i ? { ...row, [field]: v } : row)));
   const addInfo = () => saveInfo([...info, { label: "", time: "" }]);
@@ -259,16 +252,17 @@ export default function PartyPage() {
   // Mirror the album colors onto a Govee light via /api/govee. Fires once per
   // palette change (≈ per song); no-ops silently when Govee isn't configured
   // server-side or the call fails, so it never disturbs the dashboard.
+  const goveeOn = config.lights.govee.enabled;
   const goveeKey = `${theme.gradient.join(",")}|${theme.accent}`;
   useEffect(() => {
-    if (!theme.gradient.length) return;
+    if (!goveeOn || !theme.gradient.length) return;
     fetch("/api/govee", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ colors: theme.gradient, accent: theme.accent }),
     }).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [goveeKey]);
+  }, [goveeKey, goveeOn]);
 
   const lyrics = useLyrics(current);
   const lyricPos = positionMs + lyricLead;
@@ -276,9 +270,12 @@ export default function PartyPage() {
 
   // Only time-synced lyrics drive the center column. Plain-only or truly-absent
   // lyrics fall back to the hero layout (big cover + player, enlarged queue).
+  // lyrics.mode "always" keeps the lyrics column; "off" always uses the hero.
   const hasSynced = (lyrics.synced?.length ?? 0) > 0;
-  const showLyrics = lyrics.loading || hasSynced;
-  const maxUpNext = showLyrics ? 5 : 6;
+  const lyricsMode = config.lyrics.mode;
+  const showLyrics = lyricsMode === "always" || (lyricsMode === "auto" && (lyrics.loading || hasSynced));
+  const upNextCount = config.widgets.upNext.count;
+  const maxUpNext = upNextCount === "auto" ? (showLyrics ? 5 : 6) : upNextCount;
 
   const pct = current ? Math.min(100, (positionMs / current.duration_ms) * 100) : 0;
   const accentShadow = rgba(theme.accent, 0.4);
@@ -332,7 +329,13 @@ export default function PartyPage() {
     "--ink-05": rgba(theme.ink, 0.05),
     "--glass-tint": rgba(theme.surface, 0.34),
     "--glass-rim": "rgba(255,255,255,0.22)",
+    "--panel-radius": `${config.panels.radius}px`,
+    transitionDuration: `${config.color.transitionMs}ms`,
   } as CSSProperties;
+
+  const GLASS = panelClass(config.panels.style);
+  const radius = config.panels.radius;
+  const bg = config.background;
 
   // Shared building blocks — reused by both the lyrics layout (3-col) and the
   // hero layout. Player pieces are content-only so they can be packed into
@@ -394,7 +397,7 @@ export default function PartyPage() {
   const rightColumn = (
     <motion.section layout layoutId="rightcol" transition={MORPH} className="flex flex-col min-h-0 gap-5">
       <div>
-        <DateClock className="mt-3 mb-1 space-y-0.5" />
+        <DateClock className="mt-3 mb-1 space-y-0.5" clock={config.widgets.clock} />
         <textarea
           ref={titleRef}
           value={title}
@@ -403,13 +406,13 @@ export default function PartyPage() {
           spellCheck={false}
           rows={1}
           className={`${editBase} font-black uppercase tracking-tight leading-[1.05] break-words text-5xl xl:text-6xl w-full resize-none overflow-hidden px-2 py-2`}
-          style={{ fontFamily: "var(--font-sans)", color: "var(--primary)", textShadow: halo, height: titleH }}
+          style={{ fontFamily: config.widgets.title.font === "anton" ? "var(--font-display)" : "var(--font-sans)", color: "var(--primary)", textShadow: halo, height: titleH }}
         />
         <div className="w-10 border-t mt-5" style={{ borderColor: "var(--accent)" }} />
       </div>
 
       {/* INFO (editable list) */}
-      <GlassPanel className="p-5">
+      <GlassPanel className="p-5" distort={config.panels.style !== "frosted"}>
         <div className="text-xs font-bold uppercase tracking-[0.12em] mb-3">Info</div>
         <div className="space-y-1.5">
           {info.map((row, i) => {
@@ -457,7 +460,7 @@ export default function PartyPage() {
 
   return (
     <div
-      className={`${display.variable} ${sans.variable} relative h-screen w-screen overflow-hidden flex flex-col transition-colors duration-700`}
+      className={`${display.variable} ${sans.variable} relative h-screen w-screen overflow-hidden flex flex-col transition-colors`}
       style={themeVars}
     >
       {/* SVG displacement filter that gives the glass panels their liquid edges */}
@@ -475,13 +478,13 @@ export default function PartyPage() {
       {theme.gradient.length > 0 && (
         <>
           <div className="absolute inset-0 z-0">
-            <GradientBackground colors={theme.gradient} />
+            <GradientBackground colors={theme.gradient} shader={bg.shader} />
           </div>
           {/* ... softened by a backdrop blur layer so it recedes into ambience
               (blurring the canvas via CSS filter would blank it in Chromium). */}
           <div
             className="absolute inset-0 z-0"
-            style={{ backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", background: rgba(theme.surface, 0.12) }}
+            style={{ backdropFilter: `blur(${bg.blur}px)`, WebkitBackdropFilter: `blur(${bg.blur}px)`, background: rgba(theme.surface, bg.dim) }}
           />
         </>
       )}
@@ -526,9 +529,9 @@ export default function PartyPage() {
                   counter-scale it during the layout morph — otherwise the rounded
                   corners distort/square off while the panels resize. */}
               <section className="hidden lg:flex flex-col min-h-0 gap-5">
-                <motion.div layout layoutId="cover" transition={MORPH} className={`${GLASS} p-5 flex items-center justify-center min-h-0 flex-1`} style={{ borderRadius: 26 }}>{albumImg}</motion.div>
-                <motion.div layout layoutId="np" transition={MORPH} className={`${GLASS} p-5`} style={{ borderRadius: 26 }}>{renderNowPlaying()}</motion.div>
-                <motion.div layout layoutId="tp" transition={MORPH} className={`${GLASS} p-5`} style={{ borderRadius: 26 }}>{renderTransport()}</motion.div>
+                <motion.div layout layoutId="cover" transition={MORPH} className={`${GLASS} p-5 flex items-center justify-center min-h-0 flex-1`} style={{ borderRadius: radius }}>{albumImg}</motion.div>
+                <motion.div layout layoutId="np" transition={MORPH} className={`${GLASS} p-5`} style={{ borderRadius: radius }}>{renderNowPlaying()}</motion.div>
+                <motion.div layout layoutId="tp" transition={MORPH} className={`${GLASS} p-5`} style={{ borderRadius: radius }}>{renderTransport()}</motion.div>
               </section>
 
               {/* CENTER — lyrics over the gradient (halo for legibility) */}
@@ -570,7 +573,7 @@ export default function PartyPage() {
 
       {/* BOTTOM — up next, floating glass bar */}
       <div className="relative z-10 px-8 lg:px-10 pb-6">
-        <GlassPanel className="px-6 py-4 flex items-center gap-8">
+        <GlassPanel className="px-6 py-4 flex items-center gap-8" distort={config.panels.style !== "frosted"}>
           <div className="flex items-center gap-3 shrink-0 text-sm font-bold uppercase tracking-[0.1em]">
             Up Next <span className="text-[color:var(--ink-40)]">→</span>
           </div>
