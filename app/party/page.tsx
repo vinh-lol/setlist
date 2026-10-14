@@ -3,60 +3,43 @@
 /* Hallmark · macrostructure: Editorial Dashboard (studied DNA) · genre: editorial
  * tone: editorial · color: album-adaptive via Huelix toolkit (Surface/Body/Primary/Accent roles)
  * type: Anton (title) + Inter (UI) + Bitcount Single (lyrics)
- * lyrics: word-by-word build · /party fullscreen dashboard */
+ * lyrics: word-by-word build · /party fullscreen dashboard
+ *
+ * This page only wires things together. The pieces live in:
+ *   hooks/usePartyPlayback  current track, queue, position clock, transport
+ *   hooks/useAlbumTheme     album palette → theme, Govee light sync
+ *   hooks/useDisplayConfig  saved look (DisplayConfig), device settings, title/info
+ *   components/party/*      background, panels, layouts, widgets */
 
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect } from "react";
 import { Anton, Inter } from "next/font/google";
-import { LayoutGroup, MotionConfig, motion, type Transition } from "framer-motion";
-import dynamic from "next/dynamic";
-import { getQueue, pausePlayback, resumePlayback, skipNext, skipPrevious } from "@/lib/spotify";
-import { useCurrentlyPlaying } from "@/hooks/useCurrentlyPlaying";
-import { useLyrics } from "@/hooks/useLyrics";
-import { prefetchLyrics } from "@/lib/lyrics";
-import { analyzeAlbum, buildTheme, rgba, DEFAULT_THEME, type AlbumTheme } from "@/lib/albumTheme";
-import { formatDuration } from "@/lib/timeline";
-import type { SpotifyTrack } from "@/lib/types";
+import { LayoutGroup, MotionConfig } from "framer-motion";
+import { rgba } from "@/lib/albumTheme";
 import type { LyricLine } from "@/lib/lyrics";
-import { hexToRgb } from "@/lib/huelix-palette-toolkit";
-import PartyLyrics from "@/components/PartyLyrics";
-import GlassPanel from "@/components/GlassPanel";
+import { panelClass, textHalo, themeCssVars } from "@/lib/display/theme";
 import { DisplayConfigProvider, useDisplayConfig } from "@/hooks/useDisplayConfig";
-import type { DisplayConfig, InfoItem, PanelStyle } from "@/lib/display/config";
+import { usePartyPlayback } from "@/hooks/usePartyPlayback";
+import { useAlbumTheme, useGoveeSync } from "@/hooks/useAlbumTheme";
+import { useLyricOffsetKeys } from "@/hooks/useLyricOffsetKeys";
+import { useFullscreen } from "@/hooks/useFullscreen";
+import { useLyrics } from "@/hooks/useLyrics";
+import PartyLyrics from "@/components/PartyLyrics";
+import GlassFilterDefs from "@/components/party/GlassFilterDefs";
+import DisplayBackground from "@/components/party/DisplayBackground";
+import FullscreenButton from "@/components/party/FullscreenButton";
+import LyricOffsetToast from "@/components/party/LyricOffsetToast";
+import AlbumArt from "@/components/party/AlbumArt";
+import NowPlayingCard from "@/components/party/NowPlayingCard";
+import Transport from "@/components/party/Transport";
+import TitleBlock from "@/components/party/TitleBlock";
+import UpNextBar from "@/components/party/UpNextBar";
+import ClassicLayout from "@/components/party/layouts/ClassicLayout";
+import HeroLayout from "@/components/party/layouts/HeroLayout";
 
 const display = Anton({ weight: "400", subsets: ["latin"], variable: "--font-display" });
 const sans = Inter({ subsets: ["latin"], variable: "--font-sans" });
-
-// WebGL/three — client only.
-const GradientBackground = dynamic(() => import("@/components/GradientBackground"), { ssr: false });
-
-// Lyric timing offset (device.lyricOffsetMs), in ms. 0 = track the
-// (latency-compensated) playback position exactly. Positive = lyrics run ahead
-// of the audio, negative = lyrics run behind. Spotify reports the *stream*
-// position, but on a TV / BT speaker / Spotify Connect target the sound you
-// actually hear lags that by the device's output + buffering latency — so the
-// lyrics drift ahead. The -600ms default pulls them back; live-tune with ← / →
-// at the venue (see below).
-const LEAD_STEP_MS = 100;
-
-// Shared spring-ish tween for the layout morph (panels sliding/resizing between
-// the lyrics layout and the hero layout).
-const MORPH: Transition = { duration: 0.55, ease: [0.22, 1, 0.36, 1] };
-
-// Glass treatment per panel style. "solid" and "none" arrive with the settings
-// drawer (Phase 3); until then they render as liquid glass.
-function panelClass(style: PanelStyle): string {
-  return style === "frosted" ? "lg-panel" : "lg-panel lg-distort";
-}
-
-// A halo in the tone opposite the ink, so bare text stays legible over the
-// live gradient (light glow under dark text, dark glow under light text).
-function glowFor(hex: string): string {
-  const c = hexToRgb(hex) ?? { r: 0, g: 0, b: 0 };
-  const lum = (0.299 * c.r + 0.587 * c.g + 0.114 * c.b) / 255;
-  return lum > 0.5 ? "rgba(0,0,0,0.55)" : "rgba(255,255,255,0.5)";
-}
 
 function activeLineIdx(lines: LyricLine[] | null, positionMs: number) {
   if (!lines) return -1;
@@ -66,35 +49,6 @@ function activeLineIdx(lines: LyricLine[] | null, positionMs: number) {
     else break;
   }
   return idx;
-}
-
-// "MONDAY JUNE 27TH" — full weekday + month + ordinal day, uppercased.
-const ordinal = (n: number) => {
-  const s = ["TH", "ST", "ND", "RD"], v = n % 100;
-  return s[(v - 20) % 10] || s[v] || s[0];
-};
-const fmtPartyDate = (d: Date) =>
-  `${d.toLocaleDateString("en-US", { weekday: "long" })} ${d.toLocaleDateString("en-US", { month: "long" })} ${d.getDate()}${ordinal(d.getDate())}`.toUpperCase();
-// Default "10:42:12" (24-hour with seconds); widgets.clock picks 12h / no seconds.
-const fmtClock = (d: Date, clock: DisplayConfig["widgets"]["clock"]) =>
-  clock.hour12
-    ? d.toLocaleTimeString("en-US", { hour12: true, hour: "numeric", minute: "2-digit", ...(clock.seconds ? { second: "2-digit" } : {}) })
-    : d.toLocaleTimeString("en-GB", { hour12: false, hour: "2-digit", minute: "2-digit", ...(clock.seconds ? { second: "2-digit" } : {}) });
-
-// Live date + clock shown above the title. Self-contained so its per-second tick
-// only re-renders this block, not the whole dashboard.
-function DateClock({ className, clock }: { className?: string; clock: DisplayConfig["widgets"]["clock"] }) {
-  const [now, setNow] = useState(() => new Date());
-  useEffect(() => {
-    const t = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(t);
-  }, []);
-  return (
-    <div className={className} suppressHydrationWarning>
-      {clock.show && <div className="text-xs font-bold uppercase tracking-[0.12em] px-2 tabular-nums">{fmtClock(now, clock)}</div>}
-      {clock.date && <div className="text-xs font-bold uppercase tracking-[0.12em] px-2">{fmtPartyDate(now)}</div>}
-    </div>
-  );
 }
 
 export default function PartyPage() {
@@ -109,160 +63,26 @@ function PartyDashboard() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const token = session?.accessToken ?? "";
-  const { config, device, content, loaded, setDevice, setContent } = useDisplayConfig();
-
-  const [queue, setQueue] = useState<SpotifyTrack[]>([]);
-  const [positionMs, setPositionMs] = useState(0);
-  const [theme, setTheme] = useState<AlbumTheme>(DEFAULT_THEME);
-  const [optimisticPlaying, setOptimisticPlaying] = useState<boolean | null>(null);
-
-  // Editable dashboard copy (persisted via the display config's PartyContent).
-  const { title, info } = content;
-  const titleRef = useRef<HTMLTextAreaElement>(null);
-  const measuredFor = useRef<string | null>(null);
-  // Auto-grown title height, persisted so it stays constant across the
-  // lyrics/hero layout swap and across reloads (see the measure effect below).
-  const titleH = content.titleHeight ?? undefined;
-
-  const [isFullscreen, setIsFullscreen] = useState(false);
-
-  // Live-tunable lyric timing offset (ms). Persisted per device so a dialled-in
-  // venue setting survives reloads. `leadToast` briefly shows the value while nudging.
-  const lyricLead = device.lyricOffsetMs;
-  const [leadToast, setLeadToast] = useState(false);
-  const leadToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const nowPlaying = useCurrentlyPlaying(token);
-  const anchorRef = useRef<{ at: number; progress: number; playing: boolean } | null>(null);
-  if (nowPlaying) anchorRef.current = { at: nowPlaying.fetchedAt, progress: nowPlaying.progressMs, playing: nowPlaying.isPlaying };
+  const { config, device, setDevice } = useDisplayConfig();
 
   useEffect(() => {
     if (status === "unauthenticated") router.push("/");
   }, [status, router]);
 
-  // Live lyric-sync nudge: ← pulls lyrics later (more behind the audio), →
-  // pushes them earlier. ↓/0 resets. Lets you dial out TV/speaker output lag at
-  // the venue without a redeploy. Ignored while editing a text field.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const t = e.target as HTMLElement | null;
-      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
-      let next: number | null = null;
-      if (e.key === "ArrowLeft") next = lyricLead - LEAD_STEP_MS;
-      else if (e.key === "ArrowRight") next = lyricLead + LEAD_STEP_MS;
-      else if (e.key === "ArrowDown" || e.key === "0") next = 0;
-      if (next === null) return;
-      e.preventDefault();
-      setDevice({ lyricOffsetMs: next });
-      setLeadToast(true);
-      if (leadToastTimer.current) clearTimeout(leadToastTimer.current);
-      leadToastTimer.current = setTimeout(() => setLeadToast(false), 1600);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [lyricLead, setDevice]);
+  const playback = usePartyPlayback(token);
+  const { current, upcoming, positionMs } = playback;
+  const theme = useAlbumTheme(current?.albumArt);
+  useGoveeSync(theme, config.lights.govee.enabled);
+  const { isFullscreen, toggle: toggleFullscreen } = useFullscreen();
 
-  // Auto-grow the title textarea to fit its wrapped lines, but treat the result
-  // as a persisted constant. We only re-measure when the title *text* changes —
-  // never on layout remounts. The lyrics/hero layout swap unmounts and remounts
-  // the textarea (both columns are 300px wide, so the wrapping is identical), and
-  // measuring mid-morph used to clamp a 3-line title back to 1 line. Skipping the
-  // measure when the text is unchanged means the height set when you typed the
-  // title just stays — across the transition and across reloads (seeded from
-  // storage when the display config loads). `measuredFor` tracks the text the
-  // current height belongs to.
-  useEffect(() => {
-    const el = titleRef.current;
-    if (!el || !loaded) return;
-    // First pass after loading: a saved height already matches the saved text,
-    // so adopt it instead of re-measuring on mount.
-    if (measuredFor.current === null && content.titleHeight !== null) {
-      measuredFor.current = title;
-      return;
-    }
-    if (measuredFor.current === title) return;
-    const measure = () => {
-      el.style.height = "auto";
-      const h = el.scrollHeight;
-      el.style.height = `${h}px`;
-      measuredFor.current = title;
-      setContent({ titleHeight: h });
-    };
-    measure();
-    const raf = requestAnimationFrame(measure);
-    document.fonts?.ready.then(measure).catch(() => {});
-    return () => cancelAnimationFrame(raf);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [title, loaded]);
-
-  const saveTitle = (v: string) => setContent({ title: v });
-  const saveInfo = (next: InfoItem[]) => setContent({ info: next });
-  const updateInfo = (i: number, field: keyof InfoItem, v: string) =>
-    saveInfo(info.map((row, j) => (j === i ? { ...row, [field]: v } : row)));
-  const addInfo = () => saveInfo([...info, { label: "", time: "" }]);
-  const removeInfo = (i: number) => saveInfo(info.filter((_, j) => j !== i));
-
-  // Live Spotify queue
-  useEffect(() => {
-    if (!token) return;
-    let active = true;
-    const poll = async () => {
-      try { const q = await getQueue(token); if (active) setQueue(q); } catch {}
-    };
-    poll();
-    const id = setInterval(poll, 3_000);
-    return () => { active = false; clearInterval(id); };
-  }, [token]);
-
-  // Smooth playback clock
-  useEffect(() => {
-    const tick = () => {
-      const a = anchorRef.current;
-      if (a) setPositionMs(a.playing ? a.progress + (Date.now() - a.at) : a.progress);
-    };
-    tick();
-    const id = setInterval(tick, 100);
-    return () => clearInterval(id);
-  }, []);
-
-  // Current track comes straight from currently-playing (follows any device, no
-  // queue lag); the queue only feeds "up next".
-  const qIdx = nowPlaying?.trackId ? queue.findIndex((t) => t.id === nowPlaying.trackId) : -1;
-  const current: SpotifyTrack | null = nowPlaying?.track ?? queue[Math.max(0, qIdx)] ?? null;
-  const upcoming = queue.slice((qIdx >= 0 ? qIdx : 0) + 1);
-
-  // Prefetch lyrics for the next couple of tracks so there's no fetch pause when
-  // the song changes — by then the result is already cached (instant, no flash).
-  const prefetchKey = upcoming.slice(0, 2).map((t) => t.id).join(",");
-  useEffect(() => {
-    upcoming.slice(0, 2).forEach(prefetchLyrics);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [prefetchKey]);
-
-  // Adapt the whole theme to the album cover via the Huelix toolkit.
-  useEffect(() => {
-    if (!current?.albumArt) { setTheme(DEFAULT_THEME); return; }
-    let active = true;
-    analyzeAlbum(current.albumArt)
-      .then(({ palette, candidates, counts }) => { if (active) setTheme(buildTheme(palette, candidates, counts)); })
-      .catch(() => { if (active) setTheme(DEFAULT_THEME); });
-    return () => { active = false; };
-  }, [current?.albumArt]);
-
-  // Mirror the album colors onto a Govee light via /api/govee. Fires once per
-  // palette change (≈ per song); no-ops silently when Govee isn't configured
-  // server-side or the call fails, so it never disturbs the dashboard.
-  const goveeOn = config.lights.govee.enabled;
-  const goveeKey = `${theme.gradient.join(",")}|${theme.accent}`;
-  useEffect(() => {
-    if (!goveeOn || !theme.gradient.length) return;
-    fetch("/api/govee", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ colors: theme.gradient, accent: theme.accent }),
-    }).catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [goveeKey, goveeOn]);
+  // Lyric timing offset (device.lyricOffsetMs), in ms. Spotify reports the
+  // *stream* position, but on a TV / BT speaker / Spotify Connect target the
+  // sound you actually hear lags that by the device's output + buffering
+  // latency — so the lyrics drift ahead. The -600ms default pulls them back;
+  // live-tune with ← / → at the venue.
+  const lyricLead = device.lyricOffsetMs;
+  const setLyricLead = useCallback((ms: number) => setDevice({ lyricOffsetMs: ms }), [setDevice]);
+  const leadToast = useLyricOffsetKeys(lyricLead, setLyricLead);
 
   const lyrics = useLyrics(current);
   const lyricPos = positionMs + lyricLead;
@@ -277,245 +97,24 @@ function PartyDashboard() {
   const upNextCount = config.widgets.upNext.count;
   const maxUpNext = upNextCount === "auto" ? (showLyrics ? 5 : 6) : upNextCount;
 
-  const pct = current ? Math.min(100, (positionMs / current.duration_ms) * 100) : 0;
-  const accentShadow = rgba(theme.accent, 0.4);
-  const glow = glowFor(theme.ink);
-  const halo = `0 0 8px ${glow}, 0 0 2px ${glow}`;
-
-  // Transport controls (host token); optimistic play/pause flips the icon instantly.
-  const playing = optimisticPlaying ?? (nowPlaying?.isPlaying ?? false);
-  const handlePrev = () => { if (token) skipPrevious(token).catch(() => {}); };
-  const handleNext = () => { if (token) skipNext(token).catch(() => {}); };
-  const handlePlayPause = () => {
-    if (!token) return;
-    const next = !playing;
-    setOptimisticPlaying(next);
-    (next ? resumePlayback(token) : pausePlayback(token)).catch(() => {});
-    setTimeout(() => setOptimisticPlaying(null), 2500);
-  };
-
-  const toggleFullscreen = () => {
-    if (!document.fullscreenElement) document.documentElement.requestFullscreen?.();
-    else document.exitFullscreen?.();
-  };
-  useEffect(() => {
-    const h = () => setIsFullscreen(!!document.fullscreenElement);
-    document.addEventListener("fullscreenchange", h);
-    return () => document.removeEventListener("fullscreenchange", h);
-  }, []);
-
   if (status === "loading") {
     return <div className="flex items-center justify-center h-screen bg-white text-black/40 text-sm">Loading…</div>;
   }
 
-  const editBase =
-    "bg-transparent outline-none focus:bg-[color:var(--ink-05)] rounded transition-colors placeholder:text-[color:var(--ink-25)]";
-
-  const themeVars = {
-    background: theme.surface,
-    color: theme.ink,
-    fontFamily: "var(--font-sans)",
-    "--ink": theme.ink,
-    "--accent": theme.accent,
-    "--primary": theme.primary,
-    "--ink-65": rgba(theme.ink, 0.65),
-    "--ink-50": rgba(theme.ink, 0.5),
-    "--ink-40": rgba(theme.ink, 0.4),
-    "--ink-35": rgba(theme.ink, 0.35),
-    "--ink-30": rgba(theme.ink, 0.3),
-    "--ink-25": rgba(theme.ink, 0.25),
-    "--ink-15": rgba(theme.ink, 0.15),
-    "--ink-10": rgba(theme.ink, 0.1),
-    "--ink-05": rgba(theme.ink, 0.05),
-    "--glass-tint": rgba(theme.surface, 0.34),
-    "--glass-rim": "rgba(255,255,255,0.22)",
-    "--panel-radius": `${config.panels.radius}px`,
-    transitionDuration: `${config.color.transitionMs}ms`,
-  } as CSSProperties;
-
-  const GLASS = panelClass(config.panels.style);
-  const radius = config.panels.radius;
-  const bg = config.background;
-
-  // Shared building blocks — reused by both the lyrics layout (3-col) and the
-  // hero layout. Player pieces are content-only so they can be packed into
-  // separate bubbles (lyrics) or one long bubble (hero) and morphed between.
-  const albumImg = current?.albumArt ? (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={current.albumArt}
-      alt={current.albumName}
-      className="max-h-full max-w-full w-auto object-contain rounded-xl transition-shadow duration-1000"
-      style={{ boxShadow: `0 24px 50px -28px ${accentShadow}, 0 6px 18px -14px ${rgba(theme.ink, 0.22)}` }}
-    />
-  ) : (
-    <div className="w-full aspect-square bg-[color:var(--ink-05)] rounded-xl" />
-  );
-
-  // `big` scales the player copy/controls up for the hero (no-lyric) bubble,
-  // where there's far more room than in the lyrics layout's slim left column.
-  const renderNowPlaying = (big = false) => (
-    <>
-      <p className={`font-bold uppercase tracking-[0.12em] text-[color:var(--ink-40)] ${big ? "text-base mb-4" : "text-[11px] mb-2"}`}>Now Playing</p>
-      <p className={`font-bold uppercase tracking-tight leading-[1.02] pb-[0.06em] break-words ${big ? "text-[clamp(1.75rem,3.4vw,3.25rem)] line-clamp-3" : "text-xl line-clamp-2"}`}>{current?.name ?? "Nothing playing"}</p>
-      <p className={`text-[color:var(--ink-65)] break-words ${big ? "text-2xl xl:text-3xl mt-4 line-clamp-2" : "text-sm mt-1 line-clamp-2"}`}>{current?.artists.join(", ") ?? "Start a playlist"}</p>
-      <p className={`text-[color:var(--ink-40)] uppercase tracking-wide truncate ${big ? "text-base mt-2" : "text-[11px] mt-0.5"}`}>{current?.albumName ?? ""}</p>
-    </>
-  );
-
-  const renderTransport = (big = false) => {
-    const side = big ? 34 : 22;
-    const main = big ? 54 : 30;
-    return (
-      <>
-        <div className={`flex items-center justify-between text-[color:var(--ink-40)] tabular-nums ${big ? "text-base mb-3" : "text-[11px] mb-2"}`}>
-          <span>{formatDuration(Math.min(positionMs, current?.duration_ms ?? 0))}</span>
-          <span>{current ? formatDuration(current.duration_ms) : "0:00"}</span>
-        </div>
-        <div className={`bg-[color:var(--ink-10)] rounded-full overflow-hidden ${big ? "h-2.5" : "h-1"}`}>
-          <div className="h-full transition-[width] duration-200 ease-linear" style={{ width: `${pct}%`, background: "var(--accent)" }} />
-        </div>
-        <div className={`flex items-center justify-center ${big ? "gap-14 mt-9" : "gap-8 mt-4"}`}>
-          <button onClick={handlePrev} title="Previous" className="text-[color:var(--ink-65)] hover:text-[color:var(--ink)] transition-colors">
-            <svg width={side} height={side} viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="2.5" height="14" rx="1" /><path d="M20 5.5v13L9.5 12 20 5.5z" /></svg>
-          </button>
-          <button onClick={handlePlayPause} title={playing ? "Pause" : "Play"} className="hover:opacity-80 transition-opacity" style={{ color: "var(--accent)" }}>
-            {playing ? (
-              <svg width={main} height={main} viewBox="0 0 24 24" fill="currentColor"><rect x="6.5" y="5" width="3.5" height="14" rx="1" /><rect x="14" y="5" width="3.5" height="14" rx="1" /></svg>
-            ) : (
-              <svg width={main} height={main} viewBox="0 0 24 24" fill="currentColor"><path d="M7 5.5v13L19 12 7 5.5z" /></svg>
-            )}
-          </button>
-          <button onClick={handleNext} title="Next" className="text-[color:var(--ink-65)] hover:text-[color:var(--ink)] transition-colors">
-            <svg width={side} height={side} viewBox="0 0 24 24" fill="currentColor"><path d="M4 5.5v13L14.5 12 4 5.5z" /><rect x="16.5" y="5" width="2.5" height="14" rx="1" /></svg>
-          </button>
-        </div>
-      </>
-    );
-  };
-
-  const rightColumn = (
-    <motion.section layout layoutId="rightcol" transition={MORPH} className="flex flex-col min-h-0 gap-5">
-      <div>
-        <DateClock className="mt-3 mb-1 space-y-0.5" clock={config.widgets.clock} />
-        <textarea
-          ref={titleRef}
-          value={title}
-          onChange={(e) => saveTitle(e.target.value)}
-          placeholder="PARTY TITLE"
-          spellCheck={false}
-          rows={1}
-          className={`${editBase} font-black uppercase tracking-tight leading-[1.05] break-words text-5xl xl:text-6xl w-full resize-none overflow-hidden px-2 py-2`}
-          style={{ fontFamily: config.widgets.title.font === "anton" ? "var(--font-display)" : "var(--font-sans)", color: "var(--primary)", textShadow: halo, height: titleH }}
-        />
-        <div className="w-10 border-t mt-5" style={{ borderColor: "var(--accent)" }} />
-      </div>
-
-      {/* INFO (editable list) */}
-      <GlassPanel className="p-5" distort={config.panels.style !== "frosted"}>
-        <div className="text-xs font-bold uppercase tracking-[0.12em] mb-3">Info</div>
-        <div className="space-y-1.5">
-          {info.map((row, i) => {
-            // In fullscreen, hide fully-empty rows (editing-only placeholders).
-            if (isFullscreen && !row.label.trim() && !row.time.trim()) return null;
-            return (
-              <div key={i} className="group flex items-center gap-2">
-                <input
-                  value={row.label}
-                  onChange={(e) => updateInfo(i, "label", e.target.value)}
-                  placeholder="ITEM"
-                  spellCheck={false}
-                  className={`${editBase} flex-1 min-w-0 text-sm uppercase tracking-wide`}
-                />
-                {(!isFullscreen || row.time.trim()) && (
-                  <input
-                    value={row.time}
-                    onChange={(e) => updateInfo(i, "time", e.target.value)}
-                    placeholder="TIME"
-                    spellCheck={false}
-                    className={`${editBase} w-16 text-sm text-right tabular-nums`}
-                  />
-                )}
-                {!isFullscreen && (
-                  <button
-                    onClick={() => removeInfo(i)}
-                    className="opacity-0 group-hover:opacity-100 text-[color:var(--ink-30)] hover:text-[color:var(--ink)] text-xs w-4 shrink-0 transition-opacity"
-                    title="Remove"
-                  >
-                    ✕
-                  </button>
-                )}
-              </div>
-            );
-          })}
-          {!isFullscreen && (
-            <button onClick={addInfo} className="text-xs uppercase tracking-wide text-[color:var(--ink-35)] hover:text-[color:var(--ink)] transition-colors pt-1">
-              + Add item
-            </button>
-          )}
-        </div>
-      </GlassPanel>
-    </motion.section>
-  );
+  const halo = textHalo(theme);
+  const glass = panelClass(config.panels.style);
+  const side = <TitleBlock halo={halo} isFullscreen={isFullscreen} />;
+  const cover = <AlbumArt track={current} theme={theme} />;
 
   return (
     <div
       className={`${display.variable} ${sans.variable} relative h-screen w-screen overflow-hidden flex flex-col transition-colors`}
-      style={themeVars}
+      style={themeCssVars(theme, config)}
     >
-      {/* SVG displacement filter that gives the glass panels their liquid edges */}
-      <svg aria-hidden="true" width="0" height="0" className="absolute" style={{ position: "absolute" }}>
-        <defs>
-          <filter id="lgDistort" x="-30%" y="-30%" width="160%" height="160%" colorInterpolationFilters="sRGB">
-            <feTurbulence type="fractalNoise" baseFrequency="0.009 0.013" numOctaves="2" seed="14" result="noise" />
-            <feGaussianBlur in="noise" stdDeviation="1.4" result="noiseB" />
-            <feDisplacementMap in="SourceGraphic" in2="noiseB" scale="34" xChannelSelector="R" yChannelSelector="G" />
-          </filter>
-        </defs>
-      </svg>
-
-      {/* Album-coloured moving gradient (sharp WebGL canvas) ... */}
-      {theme.gradient.length > 0 && (
-        <>
-          <div className="absolute inset-0 z-0">
-            <GradientBackground colors={theme.gradient} shader={bg.shader} />
-          </div>
-          {/* ... softened by a backdrop blur layer so it recedes into ambience
-              (blurring the canvas via CSS filter would blank it in Chromium). */}
-          <div
-            className="absolute inset-0 z-0"
-            style={{ backdropFilter: `blur(${bg.blur}px)`, WebkitBackdropFilter: `blur(${bg.blur}px)`, background: rgba(theme.surface, bg.dim) }}
-          />
-        </>
-      )}
-
-      {/* Fullscreen toggle */}
-      <button
-        onClick={toggleFullscreen}
-        title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
-        className="absolute top-4 right-4 z-30 p-2 rounded-lg text-[color:var(--ink-30)] hover:text-[color:var(--ink)] hover:bg-[color:var(--ink-05)] transition-colors"
-      >
-        {isFullscreen ? (
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3" /></svg>
-        ) : (
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3m13-5v3a2 2 0 0 1-2 2h-3" /></svg>
-        )}
-      </button>
-
-      {/* Lyric-sync nudge readout — fades in while adjusting with ← / → (↓ resets) */}
-      <div
-        className="absolute top-4 left-1/2 -translate-x-1/2 z-30 px-3 py-1.5 rounded-full text-xs tracking-[0.18em] uppercase pointer-events-none transition-opacity duration-300"
-        style={{
-          opacity: leadToast ? 1 : 0,
-          background: rgba(theme.ink, 0.08),
-          color: rgba(theme.ink, 0.75),
-          backdropFilter: "blur(8px)",
-          WebkitBackdropFilter: "blur(8px)",
-        }}
-      >
-        Lyrics {lyricLead === 0 ? "in sync" : `${lyricLead > 0 ? "+" : ""}${(lyricLead / 1000).toFixed(1)}s`}
-        <span style={{ opacity: 0.5 }}> · ← later · → earlier · ↓ reset</span>
-      </div>
+      <GlassFilterDefs />
+      <DisplayBackground theme={theme} background={config.background} />
+      <FullscreenButton isFullscreen={isFullscreen} onToggle={toggleFullscreen} />
+      <LyricOffsetToast visible={leadToast} offsetMs={lyricLead} theme={theme} />
 
       {/* Top region — lyrics layout (3-col) morphs to/from hero layout (cover +
           one long player bubble). Framer Motion shared-layout (layoutId) slides
@@ -523,77 +122,32 @@ function PartyDashboard() {
       <MotionConfig reducedMotion="user">
         <LayoutGroup>
           {showLyrics ? (
-            <div key="lyrics-layout" className="relative z-10 flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)_minmax(0,300px)] gap-8 lg:gap-12 px-8 lg:px-10 pt-9 pb-6">
-              {/* LEFT — cover + now-playing bubble + timeline bubble. borderRadius
-                  is set inline (not just via the lg-panel class) so Framer can
-                  counter-scale it during the layout morph — otherwise the rounded
-                  corners distort/square off while the panels resize. */}
-              <section className="hidden lg:flex flex-col min-h-0 gap-5">
-                <motion.div layout layoutId="cover" transition={MORPH} className={`${GLASS} p-5 flex items-center justify-center min-h-0 flex-1`} style={{ borderRadius: radius }}>{albumImg}</motion.div>
-                <motion.div layout layoutId="np" transition={MORPH} className={`${GLASS} p-5`} style={{ borderRadius: radius }}>{renderNowPlaying()}</motion.div>
-                <motion.div layout layoutId="tp" transition={MORPH} className={`${GLASS} p-5`} style={{ borderRadius: radius }}>{renderTransport()}</motion.div>
-              </section>
-
-              {/* CENTER — lyrics over the gradient (halo for legibility) */}
-              <motion.section initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.4 }} className="h-full overflow-hidden min-h-[36vh] lg:min-h-0" style={{ textShadow: halo }}>
-                <PartyLyrics lines={lyrics.synced} activeIdx={aIdx} positionMs={lyricPos} plain={lyrics.plain} loading={lyrics.loading} accent={theme.lyric} faint={rgba(theme.ink, 0.28)} />
-              </motion.section>
-
-              {/* RIGHT — date/clock + editable title + info */}
-              {rightColumn}
-            </div>
+            <ClassicLayout
+              key="lyrics-layout"
+              glass={glass}
+              radius={config.panels.radius}
+              halo={halo}
+              cover={cover}
+              nowPlaying={<NowPlayingCard track={current} />}
+              transport={<Transport playback={playback} />}
+              lyrics={<PartyLyrics lines={lyrics.synced} activeIdx={aIdx} positionMs={lyricPos} plain={lyrics.plain} loading={lyrics.loading} accent={theme.lyric} faint={rgba(theme.ink, 0.28)} />}
+              side={side}
+            />
           ) : (
-            <motion.div
+            <HeroLayout
               key="hero-layout"
-              initial={{ opacity: 0, scale: 0.985 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={MORPH}
-              className="relative z-10 flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,300px)] gap-8 lg:gap-12 px-8 lg:px-10 pt-9 pb-6"
-            >
-              {/* HERO — ONE bubble. A single lg-panel means a single backdrop-filter
-                  region, so there are NO internal seams: three separate panels each
-                  blur only their own clipped area, which left faint divider lines no
-                  matter how borders/shadows were tuned. Cover fills the left;
-                  now-playing (top) + timeline (bottom) stack on the right, inside the
-                  same bubble. */}
-              <section className="min-h-0">
-                <div className={`${GLASS} h-full w-full grid grid-cols-1 lg:grid-cols-2 grid-rows-[minmax(0,1fr)_auto_auto] lg:grid-rows-2`}>
-                  <div className="lg:row-span-2 flex items-center justify-center min-h-0 p-8">{albumImg}</div>
-                  <div className="min-w-0 flex flex-col justify-center min-h-0 px-8 xl:px-12 pt-8 xl:pt-10 lg:pb-3">{renderNowPlaying(true)}</div>
-                  <div className="min-w-0 flex flex-col justify-center min-h-0 px-8 xl:px-12 pb-8 xl:pb-10 lg:pt-3">{renderTransport(true)}</div>
-                </div>
-              </section>
-
-              {/* RIGHT — date/clock + editable title + info */}
-              {rightColumn}
-            </motion.div>
+              glass={glass}
+              cover={cover}
+              nowPlaying={<NowPlayingCard track={current} big />}
+              transport={<Transport playback={playback} big />}
+              side={side}
+            />
           )}
         </LayoutGroup>
       </MotionConfig>
 
       {/* BOTTOM — up next, floating glass bar */}
-      <div className="relative z-10 px-8 lg:px-10 pb-6">
-        <GlassPanel className="px-6 py-4 flex items-center gap-8" distort={config.panels.style !== "frosted"}>
-          <div className="flex items-center gap-3 shrink-0 text-sm font-bold uppercase tracking-[0.1em]">
-            Up Next <span className="text-[color:var(--ink-40)]">→</span>
-          </div>
-          <div className={`flex-1 grid grid-cols-2 md:grid-cols-3 gap-5 ${showLyrics ? "lg:grid-cols-5" : "lg:grid-cols-6"}`}>
-            {upcoming.length === 0 && <p className="text-[color:var(--ink-30)] text-sm uppercase tracking-wide">Queue is empty</p>}
-            {upcoming.slice(0, maxUpNext).map((track, i) => (
-              <div key={track.playId ?? track.id + "-" + i} className="flex gap-3 items-start min-w-0">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={track.albumArt} alt="" className={`${showLyrics ? "w-14 h-14" : "w-16 h-16"} object-cover rounded-md shrink-0 transition-all duration-300`} />
-                <div className="min-w-0 flex-1">
-                  <div className="text-[11px] tabular-nums font-bold" style={{ color: "var(--accent)" }}>{String(i + 1).padStart(2, "0")}</div>
-                  <p className="font-bold uppercase tracking-tight text-sm leading-tight truncate">{track.name}</p>
-                  <p className="text-[11px] text-[color:var(--ink-50)] uppercase tracking-wide truncate">{track.artists.join(", ")}</p>
-                  <p className="text-[11px] text-[color:var(--ink-40)] tabular-nums">{formatDuration(track.duration_ms)}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </GlassPanel>
-      </div>
+      <UpNextBar upcoming={upcoming} max={maxUpNext} roomy={!showLyrics} distort={config.panels.style !== "frosted"} />
     </div>
   );
 }
