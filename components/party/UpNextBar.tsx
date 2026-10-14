@@ -1,3 +1,4 @@
+import { memo } from "react";
 import GlassPanel from "@/components/GlassPanel";
 import { formatDuration } from "@/lib/timeline";
 import type { SpotifyTrack } from "@/lib/types";
@@ -5,7 +6,7 @@ import type { PanelStyle } from "@/lib/display/config";
 
 // Floating glass bar along the bottom. `roomy` = hero layout (no lyrics), which
 // gets one more column and slightly bigger covers.
-export default function UpNextBar({
+function UpNextBar({
   upcoming,
   max,
   roomy,
@@ -41,3 +42,7 @@ export default function UpNextBar({
     </div>
   );
 }
+
+// Memoized: the page re-renders ~10x a second for the playback clock, and this
+// doesn't need to unless its own props change.
+export default memo(UpNextBar);

@@ -1,9 +1,10 @@
+import { memo } from "react";
 import type { SpotifyTrack } from "@/lib/types";
 
 // Content only (no panel), so it can sit in its own bubble (lyrics layout) or
 // share one long bubble (hero). `big` scales the copy up for the hero layout,
 // where there's far more room than in the lyrics layout's slim left column.
-export default function NowPlayingCard({ track, big = false }: { track: SpotifyTrack | null; big?: boolean }) {
+function NowPlayingCard({ track, big = false }: { track: SpotifyTrack | null; big?: boolean }) {
   return (
     <>
       <p className={`font-bold uppercase tracking-[0.12em] text-[color:var(--ink-40)] ${big ? "text-base mb-4" : "text-[11px] mb-2"}`}>Now Playing</p>
@@ -13,3 +14,7 @@ export default function NowPlayingCard({ track, big = false }: { track: SpotifyT
     </>
   );
 }
+
+// Memoized: the page re-renders ~10x a second for the playback clock, and this
+// doesn't need to unless its own props change.
+export default memo(NowPlayingCard);

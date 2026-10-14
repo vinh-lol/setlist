@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { memo, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import GlassPanel from "@/components/GlassPanel";
 import { useDisplayConfig } from "@/hooks/useDisplayConfig";
@@ -13,7 +13,7 @@ const editBase =
 
 // Right column: date/clock + editable party title + editable info rows. The
 // same layoutId in both layouts lets Framer slide it across the layout swap.
-export default function TitleBlock({ halo, isFullscreen }: { halo: string; isFullscreen: boolean }) {
+function TitleBlock({ halo, isFullscreen }: { halo: string; isFullscreen: boolean }) {
   const { config, content, loaded, setContent } = useDisplayConfig();
   const { title, info } = content;
   const titleRef = useRef<HTMLTextAreaElement>(null);
@@ -135,3 +135,7 @@ export default function TitleBlock({ halo, isFullscreen }: { halo: string; isFul
     </motion.section>
   );
 }
+
+// Memoized: the page re-renders ~10x a second for the playback clock, and this
+// doesn't need to unless its own props change.
+export default memo(TitleBlock);

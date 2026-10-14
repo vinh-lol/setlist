@@ -1,7 +1,8 @@
+import { memo } from "react";
 import { rgba, type AlbumTheme } from "@/lib/albumTheme";
 
 // Lyric-sync nudge readout — fades in while adjusting with ← / → (↓ resets).
-export default function LyricOffsetToast({ visible, offsetMs, theme }: { visible: boolean; offsetMs: number; theme: AlbumTheme }) {
+function LyricOffsetToast({ visible, offsetMs, theme }: { visible: boolean; offsetMs: number; theme: AlbumTheme }) {
   return (
     <div
       className="absolute top-4 left-1/2 -translate-x-1/2 z-30 px-3 py-1.5 rounded-full text-xs tracking-[0.18em] uppercase pointer-events-none transition-opacity duration-300"
@@ -18,3 +19,7 @@ export default function LyricOffsetToast({ visible, offsetMs, theme }: { visible
     </div>
   );
 }
+
+// Memoized: the page re-renders ~10x a second for the playback clock, and this
+// doesn't need to unless its own props change.
+export default memo(LyricOffsetToast);

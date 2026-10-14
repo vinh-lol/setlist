@@ -33,12 +33,11 @@ function deepMerge<T>(base: T, patch: unknown): T {
 }
 
 export const BUILT_IN_PRESETS: Preset[] = [
-  preset("classic", "Classic", "The original: 3D gradient, liquid glass, lyrics when a song has them.", {}),
+  preset("classic", "Classic", "The original: 3D gradient, glass panels, lyrics when a song has them.", {}),
   preset("lounge", "Lounge", "Blurred cover drifting slowly, muted colors, no lyrics.", {
     color: { intensity: "muted", transitionMs: 3000 },
     background: { type: "cover", blur: 14, dim: 0.2 },
     lyrics: { mode: "off" },
-    panels: { style: "frosted" },
     widgets: { transport: false },
   }),
   preset("karaoke", "Karaoke", "Big lyrics front and center on a dark screen.", {
@@ -50,7 +49,7 @@ export const BUILT_IN_PRESETS: Preset[] = [
   preset("club", "Club", "Dark, vivid and fast, with film grain.", {
     color: { mode: "dark", intensity: "vivid", transitionMs: 0 },
     background: { shader: { speed: 0.7, strength: 2.2, grain: true }, blur: 6 },
-    panels: { style: "solid", radius: 12 },
+    panels: { style: "solid" },
     widgets: { transport: false },
   }),
   preset("minimal", "Minimal", "Calm and flat: charcoal and gold, no panels, no lyrics.", {

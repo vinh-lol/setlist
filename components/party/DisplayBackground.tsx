@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import { rgba, type AlbumTheme } from "@/lib/albumTheme";
 import type { ColorMode, DisplayConfig } from "@/lib/display/config";
 
@@ -17,10 +17,12 @@ type Background = DisplayConfig["background"];
 //   cover  = the album cover itself, heavily blurred, slowly drifting
 //   image  = your own image or GIF URL, treated the same way (cover if empty)
 //   solid  = just the theme surface color (painted by the page root)
-// blur and dim apply on top of every type except solid. With a forced light or
+// dim tints every type except solid. blur only does work for the 3D gradient:
+// it's a full-screen backdrop blur, recomputed every frame, so the other types
+// (already soft, or blurred once as an image) skip it. With a forced light or
 // dark color mode, photo backgrounds (cover, image) are dimmed further toward
 // the surface, since a bright cover would otherwise fight the forced theme.
-export default function DisplayBackground({
+function DisplayBackground({
   theme,
   background,
   albumArt,
@@ -70,20 +72,17 @@ export default function DisplayBackground({
       </div>
       {/* ... softened by a backdrop blur layer so it recedes into ambience
           (blurring the canvas via CSS filter would blank it in Chromium). */}
-      <Veil theme={theme} background={background} />
+      <Veil theme={theme} background={background} blur />
     </>
   );
 }
 
-function Veil({ theme, background }: { theme: AlbumTheme; background: Background }) {
+function Veil({ theme, background, blur = false }: { theme: AlbumTheme; background: Background; blur?: boolean }) {
+  const b = blur && background.blur > 0 ? `blur(${background.blur}px)` : undefined;
   return (
     <div
       className="absolute inset-0 z-0"
-      style={{
-        backdropFilter: `blur(${background.blur}px)`,
-        WebkitBackdropFilter: `blur(${background.blur}px)`,
-        background: rgba(theme.surface, background.dim),
-      }}
+      style={{ backdropFilter: b, WebkitBackdropFilter: b, background: rgba(theme.surface, background.dim) }}
     />
   );
 }
@@ -114,3 +113,7 @@ function CrossfadeImage({ src, blur }: { src: string; blur: number }) {
     </div>
   );
 }
+
+// Memoized: the page re-renders ~10x a second for the playback clock, and this
+// doesn't need to unless its own props change.
+export default memo(DisplayBackground);
