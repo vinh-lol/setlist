@@ -6,10 +6,12 @@ import { rgba, type AlbumTheme } from "@/lib/albumTheme";
 import { useDisplayConfig } from "@/hooks/useDisplayConfig";
 import { DEFAULT_CONFIG, DEFAULT_LYRIC_OFFSET_MS, type DisplayConfig } from "@/lib/display/config";
 import { ColorTrio, Field, Segmented, Slider, TextInput, Toggle } from "./controls";
+import LooksTab from "./LooksTab";
 
-type TabId = "color" | "background" | "lyrics" | "panels" | "widgets" | "lights" | "tv";
+type TabId = "looks" | "color" | "background" | "lyrics" | "panels" | "widgets" | "lights" | "tv";
 
 const TABS: { id: TabId; label: string }[] = [
+  { id: "looks", label: "Looks" },
   { id: "color", label: "Color" },
   { id: "background", label: "Background" },
   { id: "lyrics", label: "Lyrics" },
@@ -24,8 +26,8 @@ const secs = (ms: number) => `${ms > 0 ? "+" : ms < 0 ? "−" : ""}${(Math.abs(m
 // Slides over the live display so every change previews on the real screen.
 // Everything saves as you go; "Reset look" restores the original dashboard.
 export default function SettingsDrawer({ open, onClose, theme }: { open: boolean; onClose: () => void; theme: AlbumTheme }) {
-  const [tab, setTab] = useState<TabId>("color");
-  const { config, setConfig } = useDisplayConfig();
+  const [tab, setTab] = useState<TabId>("looks");
+  const { setConfig, setDevice } = useDisplayConfig();
 
   return (
     <AnimatePresence>
@@ -79,6 +81,7 @@ export default function SettingsDrawer({ open, onClose, theme }: { open: boolean
           </nav>
 
           <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+            {tab === "looks" && <LooksTab />}
             {tab === "color" && <ColorTab />}
             {tab === "background" && <BackgroundTab />}
             {tab === "lyrics" && <LyricsTab />}
@@ -91,10 +94,10 @@ export default function SettingsDrawer({ open, onClose, theme }: { open: boolean
           <footer className="px-6 py-4 border-t flex justify-end" style={{ borderColor: "var(--ink-10)" }}>
             <button
               type="button"
-              onClick={() => setConfig(() => DEFAULT_CONFIG)}
+              onClick={() => { setConfig(() => DEFAULT_CONFIG); setDevice({ activePresetId: "classic" }); }}
               className="text-xs font-bold uppercase tracking-[0.1em] text-[color:var(--ink-50)] hover:text-[color:var(--ink)]"
             >
-              Reset look
+              Reset to Classic
             </button>
           </footer>
         </motion.aside>
