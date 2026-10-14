@@ -7,11 +7,10 @@ import { hexToRgb } from "@/lib/huelix-palette-toolkit";
 import type { DisplayConfig, PanelStyle } from "./config";
 
 // Panel treatment per style (see .lg-panel and friends in globals.css):
-// liquid = blur + SVG edge distortion, frosted = blur only (much lighter on
-// TV GPUs), solid = opaque surface tint, none = no panel at all.
+// glass = backdrop blur, solid = opaque surface tint (no blur work at all),
+// none = no panel, content straight on the background.
 const PANEL_CLASS: Record<PanelStyle, string> = {
-  liquid: "lg-panel lg-distort",
-  frosted: "lg-panel",
+  glass: "lg-panel",
   solid: "lg-panel lg-solid",
   none: "lg-panel lg-bare",
 };
@@ -61,7 +60,6 @@ export function themeCssVars(theme: AlbumTheme, config: DisplayConfig): CSSPrope
     "--surface": theme.surface,
     "--panel-solid": rgba(theme.surface, 0.9),
     ...(LYRIC_FONT[config.lyrics.font] ? { "--font-lyric": LYRIC_FONT[config.lyrics.font] } : {}),
-    "--panel-radius": `${config.panels.radius}px`,
     transitionDuration: `${config.color.transitionMs}ms`,
   } as CSSProperties;
 }

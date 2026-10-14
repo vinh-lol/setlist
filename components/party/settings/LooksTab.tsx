@@ -141,7 +141,7 @@ function NameInput({ value, onChange, onSubmit, onCancel }: { value: string; onC
 }
 
 // A small picture of the look: its colors (or an "album" stripe), background
-// and lyrics setting, plus the panel style as the card's own corner radius.
+// and lyrics setting.
 function LookCard({ preset, active, onApply, children }: { preset: Preset; active: boolean; onApply: () => void; children?: React.ReactNode }) {
   const c = preset.config;
   const swatch = c.color.source === "fixed"
@@ -156,7 +156,7 @@ function LookCard({ preset, active, onApply, children }: { preset: Preset; activ
       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onApply(); } }}
       className="text-left p-3 border cursor-pointer transition-colors hover:bg-[color:var(--ink-05)] focus-visible:outline focus-visible:outline-2"
       style={{
-        borderRadius: Math.min(18, Math.max(6, c.panels.radius * 0.6)),
+        borderRadius: 14,
         borderColor: active ? "var(--ink)" : "var(--ink-15)",
         boxShadow: active ? "inset 0 0 0 1px var(--ink)" : undefined,
         outlineColor: "var(--accent)",

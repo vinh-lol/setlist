@@ -64,8 +64,12 @@ export default function PartyLyrics({ lines, activeIdx, positionMs, plain, loadi
     };
     measure();
     document.fonts?.ready.then(measure).catch(() => {}); // a newly picked font may still be loading
+    // The lyrics box can resize without the window resizing (settings panel
+    // docking beside the display), so watch the box itself.
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(measure) : null;
+    if (vpRef.current) ro?.observe(vpRef.current);
     window.addEventListener("resize", measure);
-    return () => window.removeEventListener("resize", measure);
+    return () => { ro?.disconnect(); window.removeEventListener("resize", measure); };
   }, [idx, lines, scale, fontKey]);
 
   if (loading) return <Empty>loading lyrics</Empty>;

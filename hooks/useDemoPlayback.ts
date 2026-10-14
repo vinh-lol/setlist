@@ -5,7 +5,7 @@
 // music playing. Plays, pauses and skips like the real thing. The third song
 // has no lyrics on purpose, to show the big-player layout.
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { seedLyrics, type LyricLine } from "@/lib/lyrics";
 import type { SpotifyTrack } from "@/lib/types";
 import type { PartyPlayback } from "./usePartyPlayback";
@@ -103,10 +103,13 @@ export function useDemoPlayback(active: boolean): PartyPlayback {
     setPausedAt((p) => (p === null ? null : 0));
   };
 
-  const upcoming = [1, 2, 3, 4, 5, 6].map((n) => {
-    const t = DEMO_TRACKS[(idx + n) % DEMO_TRACKS.length];
-    return { ...t, playId: `${t.playId}-${n}` };
-  });
+  const upcoming = useMemo(
+    () => [1, 2, 3, 4, 5, 6].map((n) => {
+      const t = DEMO_TRACKS[(idx + n) % DEMO_TRACKS.length];
+      return { ...t, playId: `${t.playId}-${n}` };
+    }),
+    [idx],
+  );
 
   return {
     current,

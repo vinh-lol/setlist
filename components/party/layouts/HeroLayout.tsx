@@ -38,9 +38,13 @@ export default function HeroLayout({
           matter how borders/shadows were tuned. Cover fills the left;
           now-playing (top) + timeline (bottom) stack on the right, inside the
           same bubble. */}
-      <section className="min-h-0">
-        <div className={`${glass} h-full w-full grid grid-cols-1 ${bubbleCols} ${bubbleRows}`}>
-          <div className={`${coverSpan} flex items-center justify-center min-h-0 p-8`}>{cover}</div>
+      <section className="min-h-0 flex justify-center [container-type:size]">
+        {/* With only the cover left, the bubble is a square that hugs it. */}
+        <div
+          className={`${glass} grid grid-cols-1 ${bubbleCols} ${bubbleRows} ${info ? "h-full w-full" : "aspect-square"}`}
+          style={info ? undefined : { width: "min(100%, 100cqh)" }}
+        >
+          <div className={`${coverSpan} min-h-0 min-w-0 p-8`}>{cover}</div>
           {nowPlaying && <div className={`min-w-0 flex flex-col justify-center min-h-0 px-8 xl:px-12 pt-8 xl:pt-10 ${transport ? "lg:pb-3" : "pb-8 xl:pb-10"}`}>{nowPlaying}</div>}
           {transport && <div className={`min-w-0 flex flex-col justify-center min-h-0 px-8 xl:px-12 pb-8 xl:pb-10 ${nowPlaying ? "lg:pt-3" : "pt-8 xl:pt-10"}`}>{transport}</div>}
         </div>

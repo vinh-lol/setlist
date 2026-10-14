@@ -1,6 +1,7 @@
+import { memo } from "react";
 // Top-right buttons: display settings + fullscreen. Fade out when the screen
 // is idle so nothing sits on top of the display; any mouse or key brings them back.
-export default function CornerControls({
+function CornerControls({
   hidden,
   isFullscreen,
   onToggleFullscreen,
@@ -30,3 +31,7 @@ export default function CornerControls({
     </div>
   );
 }
+
+// Memoized: the page re-renders ~10x a second for the playback clock, and this
+// doesn't need to unless its own props change.
+export default memo(CornerControls);

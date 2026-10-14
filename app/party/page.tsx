@@ -14,7 +14,7 @@
 
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Anton, Inter } from "next/font/google";
 import { LayoutGroup, MotionConfig } from "framer-motion";
 import { rgba } from "@/lib/albumTheme";
@@ -31,7 +31,6 @@ import { useIdle } from "@/hooks/useIdle";
 import { useWakeLock } from "@/hooks/useWakeLock";
 import { useLyrics } from "@/hooks/useLyrics";
 import PartyLyrics from "@/components/PartyLyrics";
-import GlassFilterDefs from "@/components/party/GlassFilterDefs";
 import DisplayBackground from "@/components/party/DisplayBackground";
 import CornerControls from "@/components/party/CornerControls";
 import LyricOffsetToast from "@/components/party/LyricOffsetToast";
@@ -77,7 +76,7 @@ function PartyDashboard() {
   const router = useRouter();
   const token = session?.accessToken ?? "";
   const { config: savedConfig, device, setDevice } = useDisplayConfig();
-  const config = effectiveConfig(savedConfig, device);
+  const config = useMemo(() => effectiveConfig(savedConfig, device), [savedConfig, device]);
 
   // /party?demo plays sample songs instead of Spotify and works signed out.
   // Read after mount (null until then) so server and client render the same.
@@ -98,6 +97,8 @@ function PartyDashboard() {
   const { isFullscreen, toggle: toggleFullscreen } = useFullscreen();
 
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const openSettings = useCallback(() => setSettingsOpen(true), []);
+  const closeSettings = useCallback(() => setSettingsOpen(false), []);
   const idle = useIdle(IDLE_MS);
   const chromeHidden = idle && !settingsOpen; // hide cursor + corner buttons
 
@@ -151,16 +152,18 @@ function PartyDashboard() {
 
   return (
     <div
-      className={`${display.variable} ${sans.variable} relative h-screen w-screen overflow-hidden flex flex-col transition-colors`}
+      className={`${display.variable} ${sans.variable} relative h-screen w-screen overflow-hidden flex transition-colors`}
       style={{ ...themeCssVars(theme, config), cursor: chromeHidden ? "none" : undefined }}
     >
-      <GlassFilterDefs />
+      {/* The display itself. Its own box (not the window) so it can shrink
+          beside the docked settings panel. */}
+      <div className="relative flex-1 min-w-0 h-full overflow-hidden flex flex-col">
       <DisplayBackground theme={theme} background={config.background} albumArt={current?.albumArt} colorMode={config.color.mode} />
       <CornerControls
         hidden={chromeHidden}
         isFullscreen={isFullscreen}
         onToggleFullscreen={toggleFullscreen}
-        onOpenSettings={() => setSettingsOpen(true)}
+        onOpenSettings={openSettings}
       />
       <LyricOffsetToast visible={leadToast} offsetMs={lyricLead} theme={theme} />
       {demo && (
@@ -181,7 +184,6 @@ function PartyDashboard() {
             <ClassicLayout
               key="lyrics-layout"
               glass={glass}
-              radius={config.panels.radius}
               halo={halo}
               cover={cover}
               nowPlaying={w.nowPlaying ? <NowPlayingCard track={current} /> : null}
@@ -219,8 +221,9 @@ function PartyDashboard() {
       {w.upNext.show && maxUpNext > 0 && (
         <UpNextBar upcoming={upcoming} max={maxUpNext} roomy={!showLyrics} panel={config.panels.style} />
       )}
+      </div>
 
-      <SettingsDrawer open={settingsOpen} onClose={() => setSettingsOpen(false)} theme={theme} />
+      <SettingsDrawer open={settingsOpen} onClose={closeSettings} />
     </div>
   );
 }

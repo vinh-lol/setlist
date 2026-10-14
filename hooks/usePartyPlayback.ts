@@ -4,7 +4,7 @@
 // a smooth position clock, lyric prefetch for what's next, and transport
 // controls. Polls Spotify straight from the browser with the host's token.
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { getQueue, pausePlayback, resumePlayback, skipNext, skipPrevious } from "@/lib/spotify";
 import { useCurrentlyPlaying } from "@/hooks/useCurrentlyPlaying";
 import { prefetchLyrics } from "@/lib/lyrics";
@@ -58,7 +58,10 @@ export function usePartyPlayback(token: string): PartyPlayback {
   // queue lag); the queue only feeds "up next".
   const qIdx = nowPlaying?.trackId ? queue.findIndex((t) => t.id === nowPlaying.trackId) : -1;
   const current: SpotifyTrack | null = nowPlaying?.track ?? queue[Math.max(0, qIdx)] ?? null;
-  const upcoming = queue.slice((qIdx >= 0 ? qIdx : 0) + 1);
+  // Same array until the queue actually changes, so memoized pieces (up next) skip re-rendering.
+  const upcomingKey = queue.map((t) => t.playId ?? t.id).join(",") + `|${qIdx}`;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const upcoming = useMemo(() => queue.slice((qIdx >= 0 ? qIdx : 0) + 1), [upcomingKey]);
 
   // Prefetch lyrics for the next couple of tracks so there's no fetch pause when
   // the song changes — by then the result is already cached (instant, no flash).

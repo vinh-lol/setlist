@@ -25,7 +25,7 @@ export type LyricsReveal = "word" | "line";
 export type LyricsFont = "bitcount" | "anton" | "inter";
 export type Size = "s" | "m" | "l";
 export type LayoutPreset = "classic" | "hero" | "lyricsOnly" | "minimal";
-export type PanelStyle = "liquid" | "frosted" | "solid" | "none";
+export type PanelStyle = "glass" | "solid" | "none";
 export type TitleFont = "anton" | "inter";
 export type GoveeMode = "palette" | "accent";
 
@@ -66,7 +66,7 @@ export interface DisplayConfig {
     size: Size;
   };
   layout: { preset: LayoutPreset };
-  panels: { style: PanelStyle; radius: number };
+  panels: { style: PanelStyle };
   widgets: {
     nowPlaying: boolean;
     transport: boolean;
@@ -85,7 +85,7 @@ export interface DeviceSettings {
   /** Lyric timing offset in ms. Negative pulls lyrics later to match TV/speaker lag. */
   lyricOffsetMs: number;
   activePresetId: string;
-  /** Swap the WebGL shader and liquid glass for lighter options on weak TV browsers. */
+  /** Swap the WebGL shader and blurred glass for lighter options on weak TV browsers. */
   lowPower: boolean;
   /** Ask the browser to keep the screen from sleeping while /party is open. */
   keepAwake: boolean;
@@ -130,7 +130,7 @@ export const DEFAULT_CONFIG: DisplayConfig = {
   },
   lyrics: { mode: "auto", reveal: "word", font: "bitcount", size: "m" },
   layout: { preset: "classic" },
-  panels: { style: "liquid", radius: 26 },
+  panels: { style: "glass" },
   widgets: {
     nowPlaying: true,
     transport: true,
@@ -220,8 +220,10 @@ export function normalizeConfig(input: unknown): DisplayConfig {
   c.lyrics.size = oneOf(c.lyrics.size, ["s", "m", "l"], d.lyrics.size);
 
   c.layout.preset = oneOf(c.layout.preset, ["classic", "hero", "lyricsOnly", "minimal"], d.layout.preset);
-  c.panels.style = oneOf(c.panels.style, ["liquid", "frosted", "solid", "none"], d.panels.style);
-  c.panels.radius = clampNum(c.panels.radius, 0, 48);
+  // "liquid" and "frosted" were merged into "glass" (they looked the same).
+  const legacyPanel = c.panels.style as string;
+  if (legacyPanel === "liquid" || legacyPanel === "frosted") c.panels.style = "glass";
+  c.panels.style = oneOf(c.panels.style, ["glass", "solid", "none"], d.panels.style);
 
   const count = (input as { widgets?: { upNext?: { count?: unknown } } } | null)?.widgets?.upNext?.count;
   c.widgets.upNext.count =
@@ -256,13 +258,14 @@ export function normalizeContent(input: unknown): PartyContent {
 /**
  * The config the display actually renders. Device settings can override the
  * look without changing what's saved: low-power mode trades the WebGL shader
- * for the CSS soft gradient and liquid glass for frosted.
+ * for the CSS soft gradient and blurred glass for solid panels, the two most
+ * expensive things to draw on a TV.
  */
 export function effectiveConfig(config: DisplayConfig, device: DeviceSettings): DisplayConfig {
   if (!device.lowPower) return config;
   return {
     ...config,
     background: { ...config.background, type: config.background.type === "shader" ? "soft" : config.background.type },
-    panels: { ...config.panels, style: config.panels.style === "liquid" ? "frosted" : config.panels.style },
+    panels: { ...config.panels, style: config.panels.style === "glass" ? "solid" : config.panels.style },
   };
 }

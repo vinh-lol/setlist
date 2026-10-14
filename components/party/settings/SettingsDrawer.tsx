@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { memo, useState, type CSSProperties, type ReactNode } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { rgba, type AlbumTheme } from "@/lib/albumTheme";
+import { rgba } from "@/lib/albumTheme";
 import { useDisplayConfig } from "@/hooks/useDisplayConfig";
 import { DEFAULT_CONFIG, DEFAULT_LYRIC_OFFSET_MS, type DisplayConfig } from "@/lib/display/config";
 import { ColorTrio, Field, Segmented, Slider, TextInput, Toggle } from "./controls";
@@ -23,37 +23,45 @@ const TABS: { id: TabId; label: string }[] = [
 
 const secs = (ms: number) => `${ms > 0 ? "+" : ms < 0 ? "−" : ""}${(Math.abs(ms) / 1000).toFixed(1)}s`;
 
-// Slides over the live display so every change previews on the real screen.
-// Everything saves as you go; "Reset look" restores the original dashboard.
-export default function SettingsDrawer({ open, onClose, theme }: { open: boolean; onClose: () => void; theme: AlbumTheme }) {
+// Neutral dark palette for the panel, the same every song, so it never
+// re-tints and always reads. Overrides the display's theme variables inside.
+const PANEL_INK = "#F4F4F6";
+const PANEL_BG = "#141418";
+const PANEL_VARS = {
+  "--ink": PANEL_INK,
+  "--surface": PANEL_BG,
+  "--accent": PANEL_INK,
+  ...Object.fromEntries([65, 50, 40, 35, 30, 25, 15, 10, 5].map((a) => [`--ink-${String(a).padStart(2, "0")}`, rgba(PANEL_INK, a / 100)])),
+} as CSSProperties;
+
+const PANEL_W = 400;
+
+// Docks beside the display on wide screens: the display shrinks to make room,
+// so every change previews on the real layout with nothing covered. On phones
+// it slides over instead. Everything saves as you go.
+function SettingsDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [tab, setTab] = useState<TabId>("looks");
   const { setConfig, setDevice } = useDisplayConfig();
 
   return (
-    <AnimatePresence>
+    <AnimatePresence initial={false}>
       {open && (
         <motion.aside
           key="settings"
           role="dialog"
           aria-label="Display settings"
-          initial={{ x: "100%" }}
-          animate={{ x: 0 }}
-          exit={{ x: "100%" }}
+          initial={{ width: 0 }}
+          animate={{ width: PANEL_W }}
+          exit={{ width: 0 }}
           transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
-          className="absolute top-0 right-0 bottom-0 z-40 w-full sm:w-[400px] flex flex-col"
-          style={{
-            background: rgba(theme.surface, 0.88),
-            backdropFilter: "blur(24px) saturate(160%)",
-            WebkitBackdropFilter: "blur(24px) saturate(160%)",
-            borderLeft: `1px solid ${rgba(theme.ink, 0.1)}`,
-            color: theme.ink,
-            boxShadow: "-24px 0 60px rgba(0,0,0,0.18)",
-          }}
+          className="absolute right-0 top-0 bottom-0 sm:relative z-40 h-full shrink-0 overflow-hidden max-w-[100vw]"
+          style={{ ...PANEL_VARS, background: PANEL_BG, color: PANEL_INK, borderLeft: "1px solid rgba(255,255,255,0.08)" }}
         >
+          <div className="h-full flex flex-col max-w-[100vw]" style={{ width: PANEL_W }}>
           <header className="flex items-center justify-between px-6 pt-6 pb-4">
             <div>
               <h2 className="text-lg font-black uppercase tracking-tight">Display</h2>
-              <p className="text-xs text-[color:var(--ink-50)]">Changes show live and save to this browser. Press S to close.</p>
+              <p className="text-xs text-[color:var(--ink-50)]">Changes show live and save to this browser. S to close.</p>
             </div>
             <button
               type="button"
@@ -73,7 +81,7 @@ export default function SettingsDrawer({ open, onClose, theme }: { open: boolean
                 onClick={() => setTab(t.id)}
                 aria-current={tab === t.id ? "page" : undefined}
                 className="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-[0.08em] transition-colors"
-                style={{ background: tab === t.id ? "var(--accent)" : "var(--ink-05)", color: tab === t.id ? accentText(theme) : "var(--ink-65)" }}
+                style={{ background: tab === t.id ? "var(--ink)" : "var(--ink-05)", color: tab === t.id ? "var(--surface)" : "var(--ink-65)" }}
               >
                 {t.label}
               </button>
@@ -100,17 +108,11 @@ export default function SettingsDrawer({ open, onClose, theme }: { open: boolean
               Reset to Classic
             </button>
           </footer>
+          </div>
         </motion.aside>
       )}
     </AnimatePresence>
   );
-}
-
-// Black or white text, whichever reads better on the accent chip.
-function accentText(theme: AlbumTheme): string {
-  const h = theme.accent.replace("#", "");
-  const [r, g, b] = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16));
-  return 0.299 * r + 0.587 * g + 0.114 * b > 150 ? "#111111" : "#FFFFFF";
 }
 
 // Patch one section of the config, keeping the rest.
@@ -200,10 +202,12 @@ function BackgroundTab() {
       )}
       {bg.type !== "solid" && (
         <>
-          <Field label="Blur">
-            <Slider label="Blur" value={bg.blur} min={0} max={40} step={1} onChange={(blur) => set({ blur })} format={(v) => `${v}px`} />
-          </Field>
-          <Field label="Dim" hint="Tints the background toward the theme surface so text pops.">
+          {bg.type !== "soft" && (
+            <Field label="Blur">
+              <Slider label="Blur" value={bg.blur} min={0} max={40} step={1} onChange={(blur) => set({ blur })} format={(v) => `${v}px`} />
+            </Field>
+          )}
+          <Field label="Dim" hint="Tints the background toward the theme color so text pops.">
             <Slider label="Dim" value={bg.dim} min={0} max={0.8} step={0.02} onChange={(dim) => set({ dim })} format={(v) => `${Math.round(v * 100)}%`} />
           </Field>
         </>
@@ -251,16 +255,12 @@ function PanelsTab() {
   const [panels, set] = useSection("panels");
   return (
     <Group>
-      <Field label="Panel style" hint="Frosted and solid are much lighter on smart TV browsers.">
+      <Field label="Panel style" hint="Solid is much lighter than glass on smart TV browsers.">
         <Segmented label="Panel style" value={panels.style} onChange={(style) => set({ style })} options={[
-          { value: "liquid", label: "Liquid glass" },
-          { value: "frosted", label: "Frosted" },
+          { value: "glass", label: "Glass" },
           { value: "solid", label: "Solid" },
           { value: "none", label: "None" },
         ]} />
-      </Field>
-      <Field label="Corners">
-        <Slider label="Corner radius" value={panels.radius} min={0} max={48} step={2} onChange={(radius) => set({ radius })} format={(v) => `${v}px`} />
       </Field>
     </Group>
   );
@@ -334,7 +334,7 @@ function TvTab() {
         )}
       </Field>
       <Toggle label="Keep screen awake" hint="Stops the TV or laptop from sleeping mid-party." checked={device.keepAwake} onChange={(keepAwake) => setDevice({ keepAwake })} />
-      <Toggle label="Low power mode" hint="Swaps the 3D gradient for the soft gradient and liquid glass for frosted. Try this if the TV stutters." checked={device.lowPower} onChange={(lowPower) => setDevice({ lowPower })} />
+      <Toggle label="Low power mode" hint="Swaps the 3D gradient for the soft gradient and glass for solid panels. Try this if the TV stutters." checked={device.lowPower} onChange={(lowPower) => setDevice({ lowPower })} />
       <Field label="Keyboard">
         <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
           {[
@@ -354,3 +354,5 @@ function TvTab() {
     </Group>
   );
 }
+
+export default memo(SettingsDrawer);
