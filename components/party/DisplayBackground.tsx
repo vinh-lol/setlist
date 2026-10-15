@@ -10,13 +10,14 @@ import Billboard from "./backgrounds/Billboard";
 import Vinyl from "./backgrounds/Vinyl";
 import { cityScene } from "./backgrounds/city";
 import { synthwaveScene } from "./backgrounds/synthwave";
-import { starsScene } from "./backgrounds/stars";
 import { bokehScene } from "./backgrounds/bokeh";
 import type { ScenePalette } from "./backgrounds/color";
 import type { Scene } from "./backgrounds/CanvasScene";
 
+import LibraryBackground, { isLibraryBackground } from "./backgrounds/LibraryBackground";
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const CANVAS_SCENES: Record<"city" | "synthwave" | "stars" | "bokeh", Scene<any>> = { city: cityScene, synthwave: synthwaveScene, stars: starsScene, bokeh: bokehScene };
+export const CANVAS_SCENES: Record<"city" | "synthwave" | "bokeh", Scene<any>> = { city: cityScene, synthwave: synthwaveScene, bokeh: bokehScene };
 
 // WebGL/three — client only.
 const GradientBackground = dynamic(() => import("@/components/GradientBackground"), { ssr: false });
@@ -61,7 +62,15 @@ function DisplayBackground({
   const palette = useMemo(() => scenePalette(theme), [theme]);
   if (background.type === "solid") return null;
 
-  if (background.type === "city" || background.type === "synthwave" || background.type === "stars" || background.type === "bokeh") {
+  if (isLibraryBackground(background.type)) {
+    return (
+      <>
+        <LibraryBackground type={background.type} palette={palette} speed={background.speed} albumArt={albumArt} />
+        <Veil theme={theme} background={background} color="#000000" />
+      </>
+    );
+  }
+  if (background.type === "city" || background.type === "synthwave" || background.type === "bokeh") {
     return (
       <>
         <CanvasScene scene={CANVAS_SCENES[background.type]} palette={palette} speed={background.speed} fps={lowPower ? 15 : 30} />

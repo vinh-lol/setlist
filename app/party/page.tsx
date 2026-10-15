@@ -239,7 +239,7 @@ function PartyDashboard() {
       )}
       </div>
 
-      <SettingsDrawer open={settingsOpen} onClose={closeSettings} theme={theme} />
+      <SettingsDrawer open={settingsOpen} onClose={closeSettings} theme={theme} albumArt={current?.albumArt} />
     </div>
   );
 }

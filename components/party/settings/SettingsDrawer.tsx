@@ -59,7 +59,7 @@ function loadPos(): Pos {
 // header to move it out of the way of what you're changing; it remembers
 // where you left it. The display underneath never resizes or moves.
 // Everything saves as you go.
-function SettingsDrawer({ open, onClose, theme }: { open: boolean; onClose: () => void; theme: AlbumTheme }) {
+function SettingsDrawer({ open, onClose, theme, albumArt }: { open: boolean; onClose: () => void; theme: AlbumTheme; albumArt?: string }) {
   const [tab, setTab] = useState<TabId>("background");
   const { setConfig, setDevice } = useDisplayConfig();
   const [pos, setPos] = useState<Pos | null>(null);
@@ -160,7 +160,7 @@ function SettingsDrawer({ open, onClose, theme }: { open: boolean; onClose: () =
 
           <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4 space-y-6">
             {tab === "color" && <ColorTab />}
-            {tab === "background" && <BackgroundTab theme={theme} />}
+            {tab === "background" && <BackgroundTab theme={theme} albumArt={albumArt} />}
             {tab === "lyrics" && <LyricsTab />}
             {tab === "panels" && <PanelsTab />}
             {tab === "widgets" && <WidgetsTab />}
@@ -234,12 +234,12 @@ function ColorTab() {
   );
 }
 
-function BackgroundTab({ theme }: { theme: AlbumTheme }) {
+function BackgroundTab({ theme, albumArt }: { theme: AlbumTheme; albumArt?: string }) {
   const [bg, set] = useSection("background");
   const info = backgroundInfo(bg.type);
   return (
     <Group>
-      <BackgroundGallery value={bg.type} onChange={(type) => set({ type })} theme={theme} />
+      <BackgroundGallery value={bg.type} onChange={(type) => set({ type })} theme={theme} albumArt={albumArt} />
       {bg.type === "image" && (
         <Field label="Image or GIF link" hint="Leave empty to use the blurred cover.">
           <TextInput label="Image link" value={bg.imageUrl} placeholder="https://…" onChange={(imageUrl) => set({ imageUrl })} />

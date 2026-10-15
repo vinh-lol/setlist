@@ -75,3 +75,22 @@ export function seeded(seed: number) {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
+
+function hslHex(h: number, s: number, l: number): string {
+  const [r, g, b] = hslToRgb(h, clamp(s, 0, 100), clamp(l, 0, 100));
+  return toHex(r, g, b);
+}
+
+/** tone() as a hex string, for libraries that want hex. */
+export function toneHex(hex: string, l: number, satMul = 1): string {
+  const c = hexToRgb(hex) ?? { r: 128, g: 128, b: 128 };
+  const { h, s } = rgbToHsl(c.r, c.g, c.b);
+  return hslHex(h, s * satMul, l);
+}
+
+/** glow() as a hex string: vivid, mid-bright version of the color. */
+export function glowHex(hex: string, lo = 55, hi = 72): string {
+  const c = hexToRgb(hex) ?? { r: 128, g: 128, b: 128 };
+  const { h, s, l } = rgbToHsl(c.r, c.g, c.b);
+  return hslHex(h, Math.max(s, 60), clamp(l, lo, hi));
+}

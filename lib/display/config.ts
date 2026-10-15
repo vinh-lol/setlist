@@ -20,8 +20,13 @@ export type ColorMode = "auto" | "dark" | "light";
 export type ColorIntensity = "muted" | "balanced" | "vivid";
 export type BackgroundType =
   | "shader" | "soft" | "cover" | "solid" | "image"
-  | "city" | "billboard" | "synthwave" | "stars" | "bokeh" | "vinyl";
-export const BACKGROUND_TYPES: BackgroundType[] = ["shader", "soft", "cover", "solid", "image", "city", "billboard", "synthwave", "stars", "bokeh", "vinyl"];
+  | "city" | "billboard" | "synthwave" | "bokeh" | "vinyl"
+  // effect libraries (components/party/backgrounds/LibraryBackground.tsx)
+  | "drive" | "galaxy" | "prism" | "chrome" | "aurora" | "silk" | "rays" | "mesh" | "fluted" | "halftone";
+export const BACKGROUND_TYPES: BackgroundType[] = [
+  "shader", "soft", "cover", "solid", "image", "city", "billboard", "synthwave", "bokeh", "vinyl",
+  "drive", "galaxy", "prism", "chrome", "aurora", "silk", "rays", "mesh", "fluted", "halftone",
+];
 export type ShaderShape = "waterPlane" | "plane" | "sphere";
 export type LyricsMode = "auto" | "always" | "off";
 export type LyricsReveal = "word" | "line";
@@ -218,6 +223,8 @@ export function normalizeConfig(input: unknown): DisplayConfig {
 
   c.color.fixed.colors = c.color.fixed.colors.filter(isHex).slice(0, 3);
   while (c.color.fixed.colors.length < 3) c.color.fixed.colors.push(d.color.fixed.colors[c.color.fixed.colors.length]);
+  // The basic Starfield was replaced by Galaxy.
+  if ((c.background.type as string) === "stars") c.background.type = "galaxy";
   c.background.type = oneOf(c.background.type, BACKGROUND_TYPES, d.background.type);
   c.background.speed = clampNum(c.background.speed, 0, 2);
   c.background.billboard = oneOf(c.background.billboard, ["cover", "lyrics"], d.background.billboard);
@@ -290,4 +297,7 @@ export function effectiveConfig(config: DisplayConfig, device: DeviceSettings): 
 }
 
 /** Backgrounds that are night scenes (see effectiveConfig). */
-export const NIGHT_BACKGROUNDS: BackgroundType[] = ["city", "billboard", "synthwave", "stars", "bokeh", "vinyl"];
+export const NIGHT_BACKGROUNDS: BackgroundType[] = [
+  "city", "billboard", "synthwave", "bokeh", "vinyl",
+  "drive", "galaxy", "prism", "chrome", "aurora", "silk", "rays", "fluted", "halftone",
+];
