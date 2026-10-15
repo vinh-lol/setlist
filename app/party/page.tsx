@@ -20,6 +20,7 @@ import { LayoutGroup, MotionConfig } from "framer-motion";
 import { rgba } from "@/lib/albumTheme";
 import type { LyricLine } from "@/lib/lyrics";
 import { effectiveConfig } from "@/lib/display/config";
+import { loadFonts } from "@/lib/display/fonts";
 import { LYRIC_SCALE, panelClass, textHalo, themeCssVars } from "@/lib/display/theme";
 import { DisplayConfigProvider, useDisplayConfig } from "@/hooks/useDisplayConfig";
 import { usePartyPlayback } from "@/hooks/usePartyPlayback";
@@ -97,10 +98,13 @@ function PartyDashboard() {
   const { isFullscreen, toggle: toggleFullscreen } = useFullscreen();
 
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const openSettings = useCallback(() => setSettingsOpen(true), []);
+  const toggleSettings = useCallback(() => setSettingsOpen((o) => !o), []);
   const closeSettings = useCallback(() => setSettingsOpen(false), []);
   const idle = useIdle(IDLE_MS);
   const chromeHidden = idle && !settingsOpen; // hide cursor + corner buttons
+
+  // Fetch the picked lyric and title fonts (only those) from Google Fonts.
+  useEffect(() => loadFonts([config.lyrics.font, config.widgets.title.font]), [config.lyrics.font, config.widgets.title.font]);
 
   // S = settings, F = fullscreen, Esc = close settings.
   useEffect(() => {
@@ -134,6 +138,7 @@ function PartyDashboard() {
   const hasSynced = (lyrics.synced?.length ?? 0) > 0;
   const lyricsMode = config.lyrics.mode;
   const showLyrics = lyricsMode === "always" || (lyricsMode === "auto" && (lyrics.loading || hasSynced));
+  const billboard = config.background.type === "billboard";
   const upNextCount = config.widgets.upNext.count;
   const maxUpNext = upNextCount === "auto" ? (showLyrics ? 5 : 6) : upNextCount;
 
@@ -144,7 +149,7 @@ function PartyDashboard() {
   const w = config.widgets;
   const halo = textHalo(theme);
   const glass = panelClass(config.panels.style);
-  const hasSide = w.clock.show || w.clock.date || w.title.show || w.info;
+  const hasSide = w.side && (w.clock.show || w.clock.date || w.title.show || w.info);
   const side = hasSide ? <TitleBlock halo={halo} isFullscreen={isFullscreen} /> : null;
   const cover = <AlbumArt track={current} theme={theme} />;
   // Upcoming (not yet sung) lyric words; brighter on forced dark so they don't sink.
@@ -158,12 +163,21 @@ function PartyDashboard() {
       {/* The display itself. Its own box (not the window) so it can shrink
           beside the docked settings panel. */}
       <div className="relative flex-1 min-w-0 h-full overflow-hidden flex flex-col">
-      <DisplayBackground theme={theme} background={config.background} albumArt={current?.albumArt} colorMode={config.color.mode} />
+      <DisplayBackground
+        theme={theme}
+        background={config.background}
+        albumArt={current?.albumArt}
+        colorMode={config.color.mode}
+        track={current}
+        lyricLine={lyrics.synced?.[aIdx]?.text ?? null}
+        playing={playback.playing}
+        lowPower={device.lowPower}
+      />
       <CornerControls
         hidden={chromeHidden}
         isFullscreen={isFullscreen}
         onToggleFullscreen={toggleFullscreen}
-        onOpenSettings={openSettings}
+        onOpenSettings={toggleSettings}
       />
       <LyricOffsetToast visible={leadToast} offsetMs={lyricLead} theme={theme} />
       {demo && (
@@ -180,7 +194,13 @@ function PartyDashboard() {
           and resizes the cover/now-playing/timeline panels between the two. */}
       <MotionConfig reducedMotion="user">
         <LayoutGroup>
-          {showLyrics ? (
+          {billboard ? (
+            // The billboard is the now-playing display (cover and song, or the
+            // lyric line), so only the corner column stays on top of it.
+            <div className="relative z-10 flex-1 min-h-0 flex justify-end px-8 lg:px-10 pt-9 pb-6">
+              {side && <div className="w-[300px] min-h-0 flex flex-col">{side}</div>}
+            </div>
+          ) : showLyrics ? (
             <ClassicLayout
               key="lyrics-layout"
               glass={glass}
@@ -200,6 +220,10 @@ function PartyDashboard() {
                   reveal={config.lyrics.reveal}
                   scale={LYRIC_SCALE[config.lyrics.size]}
                   fontKey={config.lyrics.font}
+                  layout={config.lyrics.layout}
+                  caps={config.lyrics.caps}
+                  align={config.lyrics.align}
+                  effect={config.lyrics.effect}
                 />
               }
               side={side}
@@ -223,7 +247,7 @@ function PartyDashboard() {
       )}
       </div>
 
-      <SettingsDrawer open={settingsOpen} onClose={closeSettings} />
+      <SettingsDrawer open={settingsOpen} onClose={closeSettings} theme={theme} albumArt={current?.albumArt} />
     </div>
   );
 }

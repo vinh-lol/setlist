@@ -7,6 +7,7 @@ import { useDisplayConfig } from "@/hooks/useDisplayConfig";
 import type { InfoItem } from "@/lib/display/config";
 import DateClock from "./DateClock";
 import { MORPH } from "./morph";
+import { FONT_SIZE_FIX, lyricFont } from "@/lib/display/fonts";
 
 const editBase =
   "bg-transparent outline-none focus:bg-[color:var(--ink-05)] rounded transition-colors placeholder:text-[color:var(--ink-25)]";
@@ -16,6 +17,8 @@ const editBase =
 function TitleBlock({ halo, isFullscreen }: { halo: string; isFullscreen: boolean }) {
   const { config, content, loaded, setContent } = useDisplayConfig();
   const { title, info } = content;
+  const titleFont = config.widgets.title.font;
+  const measureKey = `${title}|${titleFont}`;
   const titleRef = useRef<HTMLTextAreaElement>(null);
   const measuredFor = useRef<string | null>(null);
 
@@ -31,10 +34,10 @@ function TitleBlock({ halo, isFullscreen }: { halo: string; isFullscreen: boolea
     const el = titleRef.current;
     if (!el || !loaded) return;
     if (measuredFor.current === null && content.titleHeight !== null) {
-      measuredFor.current = title;
+      measuredFor.current = measureKey;
       return;
     }
-    if (measuredFor.current === title) return;
+    if (measuredFor.current === measureKey) return;
     let cancelled = false;
     const measure = () => {
       // A late callback (fonts loading, next frame) can land after the layout
@@ -45,7 +48,7 @@ function TitleBlock({ halo, isFullscreen }: { halo: string; isFullscreen: boolea
       const h = el.scrollHeight;
       if (h <= 0) return;
       el.style.height = `${h}px`;
-      measuredFor.current = title;
+      measuredFor.current = measureKey;
       setContent({ titleHeight: h });
     };
     measure();
@@ -53,7 +56,7 @@ function TitleBlock({ halo, isFullscreen }: { halo: string; isFullscreen: boolea
     document.fonts?.ready.then(measure).catch(() => {});
     return () => { cancelled = true; cancelAnimationFrame(raf); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [title, loaded]);
+  }, [measureKey, loaded]);
 
   const saveInfo = (next: InfoItem[]) => setContent({ info: next });
   const updateInfo = (i: number, field: keyof InfoItem, v: string) =>
@@ -74,22 +77,23 @@ function TitleBlock({ halo, isFullscreen }: { halo: string; isFullscreen: boolea
           placeholder="PARTY TITLE"
           spellCheck={false}
           rows={1}
-          className={`${editBase} font-black uppercase tracking-tight leading-[1.05] break-words text-5xl xl:text-6xl w-full resize-none overflow-hidden px-2 py-2`}
+          className={`${editBase} font-black uppercase tracking-tight leading-[1.05] break-words w-full resize-none overflow-hidden px-2 py-2`}
           style={{
-            fontFamily: titleW.font === "anton" ? "var(--font-display)" : "var(--font-sans)",
+            fontFamily: lyricFont(titleW.font).family,
+            fontSize: `calc(clamp(3rem, 3.2vw, 3.75rem) * ${FONT_SIZE_FIX[titleW.font] ?? 1})`,
             color: "var(--primary)",
             textShadow: halo,
             height: content.titleHeight ?? undefined,
           }}
         />
-        <div className="w-10 border-t mt-5" style={{ borderColor: "var(--accent)" }} />
+        {titleW.divider && <div className="w-10 border-t mt-5" style={{ borderColor: "var(--accent)" }} />}
         </>)}
       </div>
 
       {/* INFO (editable list) */}
       {config.widgets.info && (
       <GlassPanel className="p-5" panel={config.panels.style}>
-        <div className="text-xs font-bold uppercase tracking-[0.12em] mb-3">Info</div>
+        {config.widgets.infoHeading && <div className="text-xs font-bold uppercase tracking-[0.12em] mb-3">Info</div>}
         <div className="space-y-1.5">
           {info.map((row, i) => {
             // In fullscreen, hide fully-empty rows (editing-only placeholders).
@@ -103,7 +107,7 @@ function TitleBlock({ halo, isFullscreen }: { halo: string; isFullscreen: boolea
                   spellCheck={false}
                   className={`${editBase} flex-1 min-w-0 text-sm uppercase tracking-wide`}
                 />
-                {(!isFullscreen || row.time.trim()) && (
+                {config.widgets.infoTimes && (!isFullscreen || row.time.trim()) && (
                   <input
                     value={row.time}
                     onChange={(e) => updateInfo(i, "time", e.target.value)}

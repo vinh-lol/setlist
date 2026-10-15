@@ -102,6 +102,7 @@ export function Slider({
   onChange,
   format,
   label,
+  disabled = false,
 }: {
   value: number;
   min: number;
@@ -110,12 +111,14 @@ export function Slider({
   onChange: (v: number) => void;
   format: (v: number) => string;
   label: string;
+  disabled?: boolean;
 }) {
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex items-center gap-3" style={{ opacity: disabled ? 0.4 : 1 }}>
       <input
         type="range"
         aria-label={label}
+        disabled={disabled}
         min={min}
         max={max}
         step={step}

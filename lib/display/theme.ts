@@ -5,6 +5,7 @@ import type { CSSProperties } from "react";
 import { rgba, type AlbumTheme } from "@/lib/albumTheme";
 import { hexToRgb } from "@/lib/huelix-palette-toolkit";
 import type { DisplayConfig, PanelStyle } from "./config";
+import { FONT_SIZE_FIX, lyricFont } from "./fonts";
 
 // Panel treatment per style (see .lg-panel and friends in globals.css):
 // glass = backdrop blur, solid = opaque surface tint (no blur work at all),
@@ -18,11 +19,6 @@ export function panelClass(style: PanelStyle): string {
   return PANEL_CLASS[style];
 }
 
-const LYRIC_FONT: Record<DisplayConfig["lyrics"]["font"], string | undefined> = {
-  bitcount: undefined, // keep the :root default (Bitcount Single)
-  anton: "var(--font-display)",
-  inter: "var(--font-sans)",
-};
 export const LYRIC_SCALE: Record<DisplayConfig["lyrics"]["size"], number> = { s: 0.8, m: 1, l: 1.25 };
 
 // A halo in the tone opposite the ink, so bare text stays legible over the
@@ -59,7 +55,8 @@ export function themeCssVars(theme: AlbumTheme, config: DisplayConfig): CSSPrope
     "--glass-rim": "rgba(255,255,255,0.22)",
     "--surface": theme.surface,
     "--panel-solid": rgba(theme.surface, 0.9),
-    ...(LYRIC_FONT[config.lyrics.font] ? { "--font-lyric": LYRIC_FONT[config.lyrics.font] } : {}),
+    "--font-lyric": lyricFont(config.lyrics.font).family,
+    "--lyric-fix": FONT_SIZE_FIX[config.lyrics.font] ?? 1,
     transitionDuration: `${config.color.transitionMs}ms`,
   } as CSSProperties;
 }

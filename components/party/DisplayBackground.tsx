@@ -1,9 +1,24 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { memo, useEffect, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import { rgba, type AlbumTheme } from "@/lib/albumTheme";
 import type { ColorMode, DisplayConfig } from "@/lib/display/config";
+import type { SpotifyTrack } from "@/lib/types";
+import CanvasScene from "./backgrounds/CanvasScene";
+import Billboard from "./backgrounds/Billboard";
+import Visualizer from "./backgrounds/Visualizer";
+import Vinyl from "./backgrounds/Vinyl";
+import { cityScene } from "./backgrounds/city";
+import { synthwaveScene } from "./backgrounds/synthwave";
+import { bokehScene } from "./backgrounds/bokeh";
+import type { ScenePalette } from "./backgrounds/color";
+import type { Scene } from "./backgrounds/CanvasScene";
+
+import LibraryBackground, { isLibraryBackground } from "./backgrounds/LibraryBackground";
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const CANVAS_SCENES: Record<"city" | "synthwave" | "bokeh", Scene<any>> = { city: cityScene, synthwave: synthwaveScene, bokeh: bokehScene };
 
 // WebGL/three — client only.
 const GradientBackground = dynamic(() => import("@/components/GradientBackground"), { ssr: false });
@@ -17,6 +32,10 @@ type Background = DisplayConfig["background"];
 //   cover  = the album cover itself, heavily blurred, slowly drifting
 //   image  = your own image or GIF URL, treated the same way (cover if empty)
 //   solid  = just the theme surface color (painted by the page root)
+//   city, synthwave, stars, bokeh = canvas scenes (components/party/backgrounds)
+//   billboard = night city (skyline held in place) with a lit billboard
+//   vinyl  = spinning record with the cover as its label
+// Scenes are night-time by nature, so their dim darkens instead of tinting.
 // dim tints every type except solid. blur only does work for the 3D gradient:
 // it's a full-screen backdrop blur, recomputed every frame, so the other types
 // (already soft, or blurred once as an image) skip it. With a forced light or
@@ -27,13 +46,61 @@ function DisplayBackground({
   background,
   albumArt,
   colorMode = "auto",
+  track = null,
+  lyricLine = null,
+  playing = true,
+  lowPower = false,
 }: {
   theme: AlbumTheme;
   background: Background;
   albumArt?: string;
   colorMode?: ColorMode;
+  track?: SpotifyTrack | null;
+  lyricLine?: string | null;
+  playing?: boolean;
+  lowPower?: boolean;
 }) {
+  const palette = useMemo(() => scenePalette(theme), [theme]);
   if (background.type === "solid") return null;
+
+  if (isLibraryBackground(background.type)) {
+    return (
+      <>
+        <LibraryBackground type={background.type} palette={palette} speed={background.speed} albumArt={albumArt} />
+        <Veil theme={theme} background={background} color="#000000" />
+      </>
+    );
+  }
+  if (background.type === "city" || background.type === "synthwave" || background.type === "bokeh") {
+    return (
+      <>
+        <CanvasScene scene={CANVAS_SCENES[background.type]} palette={palette} speed={background.speed} fps={lowPower ? 15 : 30} />
+        <Veil theme={theme} background={background} color="#000000" />
+      </>
+    );
+  }
+  if (background.type === "billboard") {
+    return (
+      <>
+        <Billboard palette={palette} track={track} lyricLine={lyricLine} show={background.billboard} speed={background.speed} fps={lowPower ? 15 : 30} />
+        <Veil theme={theme} background={background} color="#000000" />
+      </>
+    );
+  }
+  if (background.type === "visualizer") {
+    const v = background.visualizer;
+    return (
+      <Visualizer palette={palette} speed={background.speed} source={v.source} tint={v.tint} change={v.change} trackId={track?.id ?? null} />
+    );
+  }
+  if (background.type === "vinyl") {
+    return (
+      <>
+        <Vinyl palette={palette} track={track} playing={playing} speed={background.speed} />
+        <Veil theme={theme} background={background} color="#000000" />
+      </>
+    );
+  }
 
   if (background.type === "soft") {
     if (theme.gradient.length === 0) return null;
@@ -68,7 +135,7 @@ function DisplayBackground({
     <>
       {/* Album-coloured moving gradient (sharp WebGL canvas) ... */}
       <div className="absolute inset-0 z-0">
-        <GradientBackground colors={theme.gradient} shader={background.shader} />
+        <GradientBackground colors={theme.gradient} shader={background.shader} motion={background.speed} />
       </div>
       {/* ... softened by a backdrop blur layer so it recedes into ambience
           (blurring the canvas via CSS filter would blank it in Chromium). */}
@@ -77,12 +144,18 @@ function DisplayBackground({
   );
 }
 
-function Veil({ theme, background, blur = false }: { theme: AlbumTheme; background: Background; blur?: boolean }) {
+// Scene colors from the theme; a monochrome theme falls back to its accent.
+export function scenePalette(theme: AlbumTheme): ScenePalette {
+  const g = theme.gradient;
+  return { c1: g[0] ?? theme.accent, c2: g[1] ?? g[0] ?? theme.accent, c3: g[2] ?? g[1] ?? theme.accent, accent: theme.accent, surface: theme.surface };
+}
+
+function Veil({ theme, background, blur = false, color }: { theme: AlbumTheme; background: Background; blur?: boolean; color?: string }) {
   const b = blur && background.blur > 0 ? `blur(${background.blur}px)` : undefined;
   return (
     <div
       className="absolute inset-0 z-0"
-      style={{ backdropFilter: b, WebkitBackdropFilter: b, background: rgba(theme.surface, background.dim) }}
+      style={{ backdropFilter: b, WebkitBackdropFilter: b, background: rgba(color ?? theme.surface, background.dim) }}
     />
   );
 }

@@ -5,14 +5,9 @@ import { usePresets } from "@/hooks/usePresets";
 import type { Preset } from "@/lib/display/presets";
 import type { DisplayConfig } from "@/lib/display/config";
 import { Field } from "./controls";
+import { backgroundInfo } from "@/lib/display/backgrounds";
 
-const BG_LABEL: Record<DisplayConfig["background"]["type"], string> = {
-  shader: "3D gradient",
-  soft: "Soft gradient",
-  cover: "Blurred cover",
-  solid: "Solid",
-  image: "Image",
-};
+
 const LYRICS_LABEL: Record<DisplayConfig["lyrics"]["mode"], string> = { auto: "Lyrics", always: "Lyrics always", off: "No lyrics" };
 
 const pill = "px-3 py-1.5 rounded-full text-sm border transition-colors";
@@ -165,7 +160,7 @@ function LookCard({ preset, active, onApply, children }: { preset: Preset; activ
       <div className="h-7 rounded-md mb-2" style={{ background: swatch, filter: c.color.mode === "dark" ? "brightness(0.55)" : c.color.intensity === "muted" ? "saturate(0.5)" : undefined }} />
       <p className="text-sm font-bold leading-tight">{preset.name}</p>
       <p className="text-[11px] text-[color:var(--ink-50)] leading-snug mt-0.5">
-        {c.color.source === "fixed" ? "Your colors" : "Album colors"} · {BG_LABEL[c.background.type]} · {LYRICS_LABEL[c.lyrics.mode]}
+        {c.color.source === "fixed" ? "Your colors" : "Album colors"} · {backgroundInfo(c.background.type).name} · {LYRICS_LABEL[c.lyrics.mode]}
       </p>
       {children}
     </div>
