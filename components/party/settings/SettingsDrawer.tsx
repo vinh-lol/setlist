@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useState, type CSSProperties, type ReactNode } from "react";
+import { memo, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { rgba, type AlbumTheme } from "@/lib/albumTheme";
 import { backgroundInfo } from "@/lib/display/backgrounds";
@@ -8,18 +8,17 @@ import BackgroundGallery from "./BackgroundGallery";
 import { useDisplayConfig } from "@/hooks/useDisplayConfig";
 import { DEFAULT_CONFIG, DEFAULT_LYRIC_OFFSET_MS, type DisplayConfig } from "@/lib/display/config";
 import { ColorTrio, Field, Segmented, Slider, TextInput, Toggle } from "./controls";
-import LooksTab from "./LooksTab";
 
-type TabId = "looks" | "color" | "background" | "lyrics" | "panels" | "widgets" | "lights" | "tv";
+// Looks (presets) and Lights (Govee) are hidden for now; their code is kept
+// in LooksTab.tsx / git history. Govee still follows its saved setting.
+type TabId = "background" | "color" | "lyrics" | "panels" | "widgets" | "tv";
 
 const TABS: { id: TabId; label: string }[] = [
-  { id: "looks", label: "Looks" },
-  { id: "color", label: "Color" },
   { id: "background", label: "Background" },
+  { id: "color", label: "Color" },
   { id: "lyrics", label: "Lyrics" },
   { id: "panels", label: "Panels" },
   { id: "widgets", label: "Widgets" },
-  { id: "lights", label: "Lights" },
   { id: "tv", label: "This TV" },
 ];
 
@@ -36,34 +35,103 @@ const PANEL_VARS = {
   ...Object.fromEntries([65, 50, 40, 35, 30, 25, 15, 10, 5].map((a) => [`--ink-${String(a).padStart(2, "0")}`, rgba(PANEL_INK, a / 100)])),
 } as CSSProperties;
 
-const PANEL_W = 400;
+const PANEL_W = 380;
+const MARGIN = 16;
+const K_POS = "display-settings-pos";
 
-// Docks beside the display on wide screens: the display shrinks to make room,
-// so every change previews on the real layout with nothing covered. On phones
-// it slides over instead. Everything saves as you go.
+type Pos = { x: number; y: number };
+
+const clampPos = (p: Pos, h: number): Pos => ({
+  x: Math.min(Math.max(MARGIN, p.x), Math.max(MARGIN, window.innerWidth - PANEL_W - MARGIN)),
+  y: Math.min(Math.max(MARGIN, p.y), Math.max(MARGIN, window.innerHeight - Math.min(h, 120) - MARGIN)),
+});
+
+function loadPos(): Pos {
+  try {
+    const p = JSON.parse(localStorage.getItem(K_POS) ?? "null");
+    if (p && Number.isFinite(p.x) && Number.isFinite(p.y)) return clampPos(p, 400);
+  } catch {}
+  // Default: top right, just under the corner buttons.
+  return { x: window.innerWidth - PANEL_W - 24, y: 64 };
+}
+
+// A floating, slightly see-through panel over the display. Drag it by the
+// header to move it out of the way of what you're changing; it remembers
+// where you left it. The display underneath never resizes or moves.
+// Everything saves as you go.
 function SettingsDrawer({ open, onClose, theme }: { open: boolean; onClose: () => void; theme: AlbumTheme }) {
-  const [tab, setTab] = useState<TabId>("looks");
+  const [tab, setTab] = useState<TabId>("background");
   const { setConfig, setDevice } = useDisplayConfig();
+  const [pos, setPos] = useState<Pos | null>(null);
+  const panelRef = useRef<HTMLElement>(null);
+  const drag = useRef<{ dx: number; dy: number } | null>(null);
+
+  useEffect(() => {
+    if (open && !pos) setPos(loadPos());
+  }, [open, pos]);
+
+  // Keep it on screen when the window resizes.
+  useEffect(() => {
+    const onResize = () => setPos((p) => (p ? clampPos(p, panelRef.current?.offsetHeight ?? 400) : p));
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    if ((e.target as HTMLElement).closest("button") || !pos) return;
+    drag.current = { dx: e.clientX - pos.x, dy: e.clientY - pos.y };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  };
+  const onPointerMove = (e: React.PointerEvent) => {
+    if (!drag.current) return;
+    setPos(clampPos({ x: e.clientX - drag.current.dx, y: e.clientY - drag.current.dy }, panelRef.current?.offsetHeight ?? 400));
+  };
+  const onPointerUp = () => {
+    if (!drag.current) return;
+    drag.current = null;
+    try { localStorage.setItem(K_POS, JSON.stringify(pos)); } catch {}
+  };
 
   return (
-    <AnimatePresence initial={false}>
-      {open && (
+    <AnimatePresence>
+      {open && pos && (
         <motion.aside
+          ref={panelRef}
           key="settings"
           role="dialog"
           aria-label="Display settings"
-          initial={{ width: 0 }}
-          animate={{ width: PANEL_W }}
-          exit={{ width: 0 }}
-          transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
-          className="absolute right-0 top-0 bottom-0 sm:relative z-40 h-full shrink-0 overflow-hidden max-w-[100vw]"
-          style={{ ...PANEL_VARS, background: PANEL_BG, color: PANEL_INK, borderLeft: "1px solid rgba(255,255,255,0.08)" }}
+          initial={{ opacity: 0, scale: 0.97 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.97 }}
+          transition={{ duration: 0.18, ease: "easeOut" }}
+          className="fixed z-40 flex flex-col overflow-hidden rounded-2xl max-w-[calc(100vw-32px)]"
+          style={{
+            ...PANEL_VARS,
+            left: pos.x,
+            top: pos.y,
+            width: PANEL_W,
+            maxHeight: `calc(100vh - ${pos.y + MARGIN}px)`,
+            background: "rgba(18,18,22,0.72)",
+            backdropFilter: "blur(18px) saturate(140%)",
+            WebkitBackdropFilter: "blur(18px) saturate(140%)",
+            border: "1px solid rgba(255,255,255,0.1)",
+            boxShadow: "0 24px 60px rgba(0,0,0,0.35)",
+            color: PANEL_INK,
+          }}
         >
-          <div className="h-full flex flex-col max-w-[100vw]" style={{ width: PANEL_W }}>
-          <header className="flex items-center justify-between px-6 pt-6 pb-4">
-            <div>
-              <h2 className="text-lg font-black uppercase tracking-tight">Display</h2>
-              <p className="text-xs text-[color:var(--ink-50)]">Changes show live and save to this browser. S to close.</p>
+          <header
+            className="flex items-center justify-between pl-5 pr-3 pt-4 pb-3 cursor-grab active:cursor-grabbing select-none touch-none"
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={onPointerUp}
+            onPointerCancel={onPointerUp}
+            title="Drag to move"
+          >
+            <div className="flex items-center gap-2.5">
+              <svg width="12" height="16" viewBox="0 0 12 16" fill="currentColor" className="text-[color:var(--ink-30)]" aria-hidden="true">
+                {[2, 7, 12].map((y) => [3, 9].map((x) => <circle key={`${x}${y}`} cx={x} cy={y} r="1.4" />))}
+              </svg>
+              <h2 className="text-base font-black uppercase tracking-tight">Display</h2>
             </div>
             <button
               type="button"
@@ -71,11 +139,11 @@ function SettingsDrawer({ open, onClose, theme }: { open: boolean; onClose: () =
               aria-label="Close settings"
               className="p-2 rounded-lg hover:bg-[color:var(--ink-05)] text-[color:var(--ink-65)] hover:text-[color:var(--ink)]"
             >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
             </button>
           </header>
 
-          <nav className="px-6 pb-4 flex flex-wrap gap-1.5 border-b" style={{ borderColor: "var(--ink-10)" }} aria-label="Settings sections">
+          <nav className="px-5 pb-3 flex flex-wrap gap-1.5 border-b" style={{ borderColor: "var(--ink-10)" }} aria-label="Settings sections">
             {TABS.map((t) => (
               <button
                 key={t.id}
@@ -90,27 +158,24 @@ function SettingsDrawer({ open, onClose, theme }: { open: boolean; onClose: () =
             ))}
           </nav>
 
-          <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
-            {tab === "looks" && <LooksTab />}
+          <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4 space-y-6">
             {tab === "color" && <ColorTab />}
             {tab === "background" && <BackgroundTab theme={theme} />}
             {tab === "lyrics" && <LyricsTab />}
             {tab === "panels" && <PanelsTab />}
             {tab === "widgets" && <WidgetsTab />}
-            {tab === "lights" && <LightsTab />}
             {tab === "tv" && <TvTab />}
           </div>
 
-          <footer className="px-6 py-4 border-t flex justify-end" style={{ borderColor: "var(--ink-10)" }}>
+          <footer className="px-5 py-3 border-t flex justify-end" style={{ borderColor: "var(--ink-10)" }}>
             <button
               type="button"
               onClick={() => { setConfig(() => DEFAULT_CONFIG); setDevice({ activePresetId: "classic" }); }}
               className="text-xs font-bold uppercase tracking-[0.1em] text-[color:var(--ink-50)] hover:text-[color:var(--ink)]"
             >
-              Reset to Classic
+              Reset all
             </button>
           </footer>
-          </div>
         </motion.aside>
       )}
     </AnimatePresence>
@@ -175,7 +240,6 @@ function BackgroundTab({ theme }: { theme: AlbumTheme }) {
   return (
     <Group>
       <BackgroundGallery value={bg.type} onChange={(type) => set({ type })} theme={theme} />
-      <p className="text-xs leading-snug text-[color:var(--ink-50)]">{info.hint}</p>
       {bg.type === "image" && (
         <Field label="Image or GIF link" hint="Leave empty to use the blurred cover.">
           <TextInput label="Image link" value={bg.imageUrl} placeholder="https://…" onChange={(imageUrl) => set({ imageUrl })} />
@@ -203,21 +267,8 @@ function BackgroundTab({ theme }: { theme: AlbumTheme }) {
               { value: "sphere", label: "Sphere" },
             ]} />
           </Field>
-          <Field label="Motion">
-            <Slider label="Motion speed" value={bg.shader.speed} min={0} max={1} step={0.05} onChange={(speed) => set({ shader: { ...bg.shader, speed } })} format={(v) => (v === 0 ? "Still" : v.toFixed(2))} />
-          </Field>
           <Toggle label="Film grain" checked={bg.shader.grain} onChange={(grain) => set({ shader: { ...bg.shader, grain } })} />
         </>
-      )}
-      {(bg.type === "shader" || bg.type === "cover" || bg.type === "image") && (
-        <Field label="Blur">
-          <Slider label="Blur" value={bg.blur} min={0} max={40} step={1} onChange={(blur) => set({ blur })} format={(v) => `${v}px`} />
-        </Field>
-      )}
-      {bg.type !== "solid" && (
-        <Field label="Dim" hint="Darkens or tints the background so text on top pops.">
-          <Slider label="Dim" value={bg.dim} min={0} max={0.8} step={0.02} onChange={(dim) => set({ dim })} format={(v) => `${Math.round(v * 100)}%`} />
-        </Field>
       )}
     </Group>
   );
@@ -301,28 +352,6 @@ function WidgetsTab() {
         </Field>
       </Toggle>
       <Toggle label="Info list" checked={w.info} onChange={(info) => set({ info })} />
-    </Group>
-  );
-}
-
-function LightsTab() {
-  const [lights, set] = useSection("lights");
-  const govee = lights.govee;
-  return (
-    <Group>
-      <Toggle
-        label="Sync Govee light"
-        hint="Needs GOVEE_API_KEY on the server. Does nothing without it."
-        checked={govee.enabled}
-        onChange={(enabled) => set({ govee: { ...govee, enabled } })}
-      >
-        <Field label="Light colors">
-          <Segmented label="Light colors" value={govee.mode} onChange={(mode) => set({ govee: { ...govee, mode } })} options={[
-            { value: "palette", label: "Full palette" },
-            { value: "accent", label: "Accent only" },
-          ]} />
-        </Field>
-      </Toggle>
     </Group>
   );
 }

@@ -97,7 +97,7 @@ function PartyDashboard() {
   const { isFullscreen, toggle: toggleFullscreen } = useFullscreen();
 
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const openSettings = useCallback(() => setSettingsOpen(true), []);
+  const toggleSettings = useCallback(() => setSettingsOpen((o) => !o), []);
   const closeSettings = useCallback(() => setSettingsOpen(false), []);
   const idle = useIdle(IDLE_MS);
   const chromeHidden = idle && !settingsOpen; // hide cursor + corner buttons
@@ -173,7 +173,7 @@ function PartyDashboard() {
         hidden={chromeHidden}
         isFullscreen={isFullscreen}
         onToggleFullscreen={toggleFullscreen}
-        onOpenSettings={openSettings}
+        onOpenSettings={toggleSettings}
       />
       <LyricOffsetToast visible={leadToast} offsetMs={lyricLead} theme={theme} />
       {demo && (

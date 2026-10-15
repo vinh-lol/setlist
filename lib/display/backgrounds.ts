@@ -22,7 +22,7 @@ export const BACKGROUNDS: BackgroundInfo[] = [
   { id: "cover", name: "Blurred cover", motion: "calm", hint: "The album cover itself, blurred and slowly drifting." },
   { id: "bokeh", name: "City lights", motion: "calm", hint: "Out-of-focus lights drifting up, like a skyline through a rainy window.", speed: true },
   { id: "vinyl", name: "Vinyl", motion: "calm", hint: "A record spinning with the cover as its label. Stops when paused.", speed: true },
-  { id: "shader", name: "3D gradient", motion: "lively", hint: "The original moving gradient. Heaviest on weak TVs." },
+  { id: "shader", name: "3D gradient", motion: "lively", hint: "The original moving gradient. Heaviest on weak TVs.", speed: true },
   { id: "city", name: "Night city", motion: "lively", hint: "Skyline with windows lit in the cover's colors, a passing train and traffic.", speed: true },
   { id: "synthwave", name: "Synthwave", motion: "lively", hint: "Retro sunset over a neon grid rolling toward you.", speed: true },
   { id: "stars", name: "Starfield", motion: "lively", hint: "Flying through stars tinted by the cover.", speed: true },

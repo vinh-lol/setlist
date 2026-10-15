@@ -119,7 +119,7 @@ function DisplayBackground({
     <>
       {/* Album-coloured moving gradient (sharp WebGL canvas) ... */}
       <div className="absolute inset-0 z-0">
-        <GradientBackground colors={theme.gradient} shader={background.shader} />
+        <GradientBackground colors={theme.gradient} shader={background.shader} motion={background.speed} />
       </div>
       {/* ... softened by a backdrop blur layer so it recedes into ambience
           (blurring the canvas via CSS filter would blank it in Chromium). */}
