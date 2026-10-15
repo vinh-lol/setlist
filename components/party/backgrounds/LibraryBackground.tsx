@@ -4,8 +4,8 @@
 // in the plan doc):
 //   React Bits (MIT + Commons Clause, copied into ./reactbits): Night drive
 //   (Hyperspeed), Galaxy, Prism burst, Liquid chrome, Aurora, Silk, Light rays
-//   Paper Shaders (Apache-2.0, npm): Mesh gradient, Fluted glass cover,
-//   Halftone cover
+//   Paper Shaders (Apache-2.0, npm): Marble (Warp), Lava lamp (Metaballs),
+//   Retro dither (Dithering), Fluted glass cover, Halftone cover
 // Each is loaded on demand (only the one in use is downloaded), takes its colors
 // from the current album, and follows the shared Motion slider. Colors and
 // speed are eased so song changes fade and speed changes glide.
@@ -23,11 +23,13 @@ const LiquidChrome = dynamic(() => import("./reactbits/LiquidChrome"), { ssr: fa
 const Aurora = dynamic(() => import("./reactbits/Aurora"), { ssr: false });
 const Silk = dynamic(() => import("./reactbits/Silk"), { ssr: false });
 const LightRays = dynamic(() => import("./reactbits/LightRays"), { ssr: false });
-const MeshGradient = dynamic(() => import("@paper-design/shaders-react").then((m) => m.MeshGradient), { ssr: false });
+const Warp = dynamic(() => import("@paper-design/shaders-react").then((m) => m.Warp), { ssr: false });
+const Metaballs = dynamic(() => import("@paper-design/shaders-react").then((m) => m.Metaballs), { ssr: false });
+const Dithering = dynamic(() => import("@paper-design/shaders-react").then((m) => m.Dithering), { ssr: false });
 const FlutedGlass = dynamic(() => import("@paper-design/shaders-react").then((m) => m.FlutedGlass), { ssr: false });
 const HalftoneDots = dynamic(() => import("@paper-design/shaders-react").then((m) => m.HalftoneDots), { ssr: false });
 
-export const LIBRARY_BACKGROUNDS = ["drive", "galaxy", "prism", "chrome", "aurora", "silk", "rays", "mesh", "fluted", "halftone"] as const;
+export const LIBRARY_BACKGROUNDS = ["drive", "galaxy", "prism", "chrome", "aurora", "silk", "rays", "marble", "lava", "dither", "fluted", "halftone"] as const;
 export type LibraryBackgroundType = (typeof LIBRARY_BACKGROUNDS)[number];
 export const isLibraryBackground = (t: BackgroundType): t is LibraryBackgroundType =>
   (LIBRARY_BACKGROUNDS as readonly string[]).includes(t);
@@ -114,10 +116,24 @@ function LibraryBackground({
           <LightRays raysOrigin="top-center" raysColor={glowHex(p.accent, 62, 78)} raysSpeed={m} intensity={1} followMouse={false} cursorShadow={false} clickPulse={false} />
         </Fill>
       );
-    case "mesh":
+    case "marble":
+      // Swirled bands of the cover's colors: crisp edges, unlike the soft blur
+      // of the Soft gradient.
       return (
-        <Fill bg={p.surface}>
-          <MeshGradient {...PAPER} colors={[p.c1, p.c2, p.c3, p.accent]} speed={0.6 * m} distortion={0.8} swirl={0.15} grainOverlay={0.06} />
+        <Fill bg={night}>
+          <Warp {...PAPER} colors={[toneHex(p.c1, 10, 0.7), toneHex(p.c2, 24, 0.8), toneHex(p.c3, 34, 0.8), toneHex(p.accent, 20, 0.8)]} speed={0.25 * m} shape="stripes" shapeScale={0.15} proportion={0.5} softness={0.55} distortion={0.2} swirl={0.6} swirlIterations={6} scale={1.6} />
+        </Fill>
+      );
+    case "lava":
+      return (
+        <Fill bg={night} shade={0.12}>
+          <Metaballs {...PAPER} colorBack={night} colors={[glowHex(p.c1, 60, 58), glowHex(p.c2, 60, 58), glowHex(p.c3, 60, 58), glowHex(p.accent, 60, 58)]} count={14} size={0.42} speed={0.6 * m} scale={2.4} />
+        </Fill>
+      );
+    case "dither":
+      return (
+        <Fill bg={night}>
+          <Dithering {...PAPER} colorBack={night} colorFront={glowHex(p.accent, 50, 46)} shape="warp" type="4x4" size={2.5} speed={0.5 * m} />
         </Fill>
       );
     case "fluted":

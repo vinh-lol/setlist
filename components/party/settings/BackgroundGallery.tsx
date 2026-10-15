@@ -103,6 +103,12 @@ const Thumb = memo(function Thumb({ id, theme, albumArt }: { id: BackgroundType;
           {[-18, 18].map((dx) => <line key={dx} x1={84} y1={40} x2={84 + dx * 1.6} y2={TH} stroke="#fff" strokeWidth="1" opacity="0.5" />)}
         </svg>
       ));
+    case "visualizer":
+      return box({ background: `radial-gradient(circle at 50% 50%, transparent 18%, ${night} 72%), repeating-conic-gradient(from 0deg at 50% 50%, ${g[0]} 0 6deg, ${g[2]} 6deg 12deg, ${glowHex(p.accent)} 12deg 18deg)` }, (
+        <svg viewBox={`0 0 ${TW} ${TH}`} className="absolute inset-0 w-full h-full" aria-hidden="true">
+          <polyline fill="none" stroke="#fff" strokeWidth="1.5" opacity="0.85" points={Array.from({ length: 34 }, (_, i) => `${i * 5.1},${48 + Math.sin(i * 0.9) * (6 + (i % 5) * 3)}`).join(" ")} />
+        </svg>
+      ));
     case "galaxy":
       return box({ background: `radial-gradient(circle at 50% 50%, ${alpha(g[1], 0.35)}, transparent 55%), radial-gradient(${g[0]} 1px, transparent 1.5px) 0 0 / 14px 14px, radial-gradient(${g[2]} 1px, transparent 1.5px) 7px 7px / 18px 18px, ${night}` });
     case "prism":
@@ -115,8 +121,14 @@ const Thumb = memo(function Thumb({ id, theme, albumArt }: { id: BackgroundType;
       return box({ background: `repeating-linear-gradient(135deg, ${toneHex(p.c2, 22)} 0 12%, ${toneHex(p.c2, 38)} 20%, ${toneHex(p.c2, 26)} 30%), ${night}` });
     case "rays":
       return box({ background: `radial-gradient(ellipse 60% 120% at 50% -10%, ${alpha(glowHex(p.accent, 62, 78), 0.85)}, transparent 70%), ${night}` });
-    case "mesh":
-      return box({ background: `radial-gradient(at 20% 30%, ${p.c1} 0, transparent 60%), radial-gradient(at 80% 25%, ${p.c2} 0, transparent 55%), radial-gradient(at 55% 90%, ${p.c3} 0, transparent 60%), radial-gradient(at 90% 85%, ${p.accent} 0, transparent 45%), ${theme.surface}` });
+    case "marble":
+      return box({ background: `repeating-radial-gradient(ellipse 120% 70% at 25% 80%, ${toneHex(p.c1, 12, 0.7)} 0 7px, ${toneHex(p.c2, 26, 0.8)} 7px 13px, ${toneHex(p.c3, 36, 0.8)} 13px 18px, ${toneHex(p.accent, 22, 0.8)} 18px 22px)`, filter: "blur(1.2px)" });
+    case "lava":
+      return box({ background: `radial-gradient(circle at 28% 62%, ${g[0]} 0 14%, transparent 15%), radial-gradient(circle at 44% 48%, ${g[1]} 0 11%, transparent 12%), radial-gradient(circle at 70% 36%, ${g[2]} 0 16%, transparent 17%), radial-gradient(circle at 78% 74%, ${glowHex(p.accent)} 0 9%, transparent 10%), ${night}`, filter: "blur(1.5px) contrast(1.4)" });
+    case "dither":
+      return box({ background: night }, (
+        <span className="absolute inset-0" style={{ background: `radial-gradient(ellipse at 40% 55%, ${glowHex(p.accent)}, transparent 65%)`, WebkitMaskImage: "repeating-conic-gradient(#000 0 25%, transparent 0 50%)", maskImage: "repeating-conic-gradient(#000 0 25%, transparent 0 50%)", WebkitMaskSize: "4px 4px", maskSize: "4px 4px" }} />
+      ));
     case "fluted":
       return box({ background: cover, filter: "blur(1px)" }, (
         <span className="absolute inset-0" style={{ background: "repeating-linear-gradient(90deg, rgba(255,255,255,0.18) 0 2px, transparent 2px 7px, rgba(0,0,0,0.25) 7px 9px, transparent 9px 12px)" }} />

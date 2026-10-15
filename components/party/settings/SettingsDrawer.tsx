@@ -1,10 +1,12 @@
 "use client";
 
-import { memo, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { memo, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { rgba, type AlbumTheme } from "@/lib/albumTheme";
 import { backgroundInfo } from "@/lib/display/backgrounds";
+import { FONT_SIZE_FIX, LYRIC_FONTS, LYRIC_FONT_IDS, loadFonts } from "@/lib/display/fonts";
 import BackgroundGallery from "./BackgroundGallery";
+import { getMicState, startMic, subscribe as subscribeMic, visualizerSupported, type MicStatus } from "@/lib/display/visualizerAudio";
 import { useDisplayConfig } from "@/hooks/useDisplayConfig";
 import { DEFAULT_CONFIG, DEFAULT_LYRIC_OFFSET_MS, type DisplayConfig } from "@/lib/display/config";
 import { ColorTrio, Field, Segmented, Slider, TextInput, Toggle } from "./controls";
@@ -239,7 +241,17 @@ function BackgroundTab({ theme, albumArt }: { theme: AlbumTheme; albumArt?: stri
   const info = backgroundInfo(bg.type);
   return (
     <Group>
-      <BackgroundGallery value={bg.type} onChange={(type) => set({ type })} theme={theme} albumArt={albumArt} />
+      {/* Motion stays pinned to the top while the gallery scrolls under it. */}
+      <div
+        className="sticky top-0 z-10 -mt-4 -mx-5 px-5 pt-4 pb-3 border-b"
+        style={{ background: "rgba(18,18,22,0.6)", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", borderColor: "var(--ink-10)" }}
+      >
+        <div className="flex items-baseline justify-between mb-1.5">
+          <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-[color:var(--ink-65)]">Motion</span>
+          {!info.speed && <span className="text-[11px] text-[color:var(--ink-50)]">{info.name} doesn&apos;t move</span>}
+        </div>
+        <Slider label="Motion speed" disabled={!info.speed} value={bg.speed} min={0} max={2} step={0.1} onChange={(speed) => set({ speed })} format={(v) => (v === 0 ? "Paused" : `${v.toFixed(1)}x`)} />
+      </div>
       {bg.type === "image" && (
         <Field label="Image or GIF link" hint="Leave empty to use the blurred cover.">
           <TextInput label="Image link" value={bg.imageUrl} placeholder="https://…" onChange={(imageUrl) => set({ imageUrl })} />
@@ -253,11 +265,7 @@ function BackgroundTab({ theme, albumArt }: { theme: AlbumTheme; albumArt?: stri
           ]} />
         </Field>
       )}
-      {info.speed && (
-        <Field label="Motion">
-          <Slider label="Motion speed" value={bg.speed} min={0} max={2} step={0.1} onChange={(speed) => set({ speed })} format={(v) => (v === 0 ? "Paused" : `${v.toFixed(1)}x`)} />
-        </Field>
-      )}
+      {bg.type === "visualizer" && <VisualizerOptions />}
       {bg.type === "shader" && (
         <>
           <Field label="Shape">
@@ -270,12 +278,63 @@ function BackgroundTab({ theme, albumArt }: { theme: AlbumTheme; albumArt?: stri
           <Toggle label="Film grain" checked={bg.shader.grain} onChange={(grain) => set({ shader: { ...bg.shader, grain } })} />
         </>
       )}
+      <BackgroundGallery value={bg.type} onChange={(type) => set({ type })} theme={theme} albumArt={albumArt} />
     </Group>
+  );
+}
+
+const MIC_TEXT: Record<MicStatus, string> = {
+  off: "Not listening yet.",
+  asking: "Waiting for permission…",
+  listening: "Listening to the room.",
+  denied: "Microphone blocked. Allow it in the browser's site settings, or use the built-in beat.",
+  insecure: "The microphone only works on a secure (https) link. Using the built-in beat for now.",
+  unsupported: "This browser has no microphone access. Using the built-in beat.",
+};
+const OFF_SERVER = { status: "off" as MicStatus, node: null };
+
+function VisualizerOptions() {
+  const [bg, set] = useSection("background");
+  const v = bg.visualizer;
+  const mic = useSyncExternalStore(subscribeMic, getMicState, () => OFF_SERVER);
+  const supported = useMemo(() => visualizerSupported(), []);
+  if (!supported) {
+    return <p className="text-sm text-[color:var(--ink-65)]">This screen&apos;s browser can&apos;t run the visualizer (it needs WebGL2).</p>;
+  }
+  return (
+    <>
+      <Field label="Reacts to" hint="Spotify doesn't share the audio itself, so the visualizer listens to the room.">
+        <Segmented label="Reacts to" value={v.source} onChange={(source) => set({ visualizer: { ...v, source } })} options={[
+          { value: "mic", label: "Microphone" },
+          { value: "beat", label: "Built-in beat" },
+        ]} />
+      </Field>
+      {v.source === "mic" && (
+        <div className="flex items-center justify-between gap-3 rounded-xl px-3 py-2.5" style={{ background: "var(--ink-05)" }}>
+          <p className="text-xs leading-snug text-[color:var(--ink-65)]">{MIC_TEXT[mic.status]}</p>
+          {(mic.status === "off" || mic.status === "denied") && (
+            <button type="button" onClick={() => startMic()} className="shrink-0 px-3 py-1.5 rounded-full text-xs font-bold" style={{ background: "var(--ink)", color: "var(--surface)" }}>
+              Allow mic
+            </button>
+          )}
+        </div>
+      )}
+      <Field label="New look" hint="Press V on the display for another look.">
+        <Segmented label="New look" value={v.change} onChange={(change) => set({ visualizer: { ...v, change } })} options={[
+          { value: "song", label: "Each song" },
+          { value: "minute", label: "Every minute" },
+          { value: "never", label: "Never" },
+        ]} />
+      </Field>
+      <Toggle label="Use cover colors" hint="Recolors the visualizer with the album's colors." checked={v.tint} onChange={(tint) => set({ visualizer: { ...v, tint } })} />
+    </>
   );
 }
 
 function LyricsTab() {
   const [lyrics, set] = useSection("lyrics");
+  // Load every lyric font while this tab is open so the previews show in their own type.
+  useEffect(() => loadFonts(LYRIC_FONT_IDS), []);
   return (
     <Group>
       <Field label="Show lyrics" hint="Auto switches to the big player when a song has no synced lyrics.">
@@ -285,17 +344,49 @@ function LyricsTab() {
           { value: "off", label: "Off" },
         ]} />
       </Field>
-      <Field label="Reveal">
-        <Segmented label="Reveal" value={lyrics.reveal} onChange={(reveal) => set({ reveal })} options={[
-          { value: "word", label: "Word by word" },
-          { value: "line", label: "Whole line" },
+      <Field label="Font">
+        <div role="radiogroup" aria-label="Lyric font" className="grid grid-cols-3 gap-1.5">
+          {LYRIC_FONTS.map((f) => {
+            const on = f.id === lyrics.font;
+            return (
+              <button
+                key={f.id}
+                type="button"
+                role="radio"
+                aria-checked={on}
+                aria-label={f.name}
+                onClick={() => set({ font: f.id })}
+                className="rounded-lg px-2 pt-2 pb-1.5 border text-left transition-colors hover:bg-[color:var(--ink-05)]"
+                style={{ borderColor: on ? "var(--ink)" : "var(--ink-10)", boxShadow: on ? "inset 0 0 0 1px var(--ink)" : undefined }}
+              >
+                <span className="block truncate leading-none" style={{ fontFamily: f.family, fontSize: `${22 * (FONT_SIZE_FIX[f.id] ?? 1)}px`, height: 26 }}>
+                  {lyrics.caps ? "SING" : "Sing"}
+                </span>
+                <span className="block mt-1 text-[10px] uppercase tracking-[0.08em] text-[color:var(--ink-50)]">{f.name}</span>
+              </button>
+            );
+          })}
+        </div>
+      </Field>
+      <Field label="Layout">
+        <Segmented label="Layout" value={lyrics.layout} onChange={(layout) => set({ layout })} options={[
+          { value: "scroll", label: "Scrolling" },
+          { value: "focus", label: "One line" },
         ]} />
       </Field>
-      <Field label="Font">
-        <Segmented label="Font" value={lyrics.font} onChange={(font) => set({ font })} options={[
-          { value: "bitcount", label: "Pixel" },
-          { value: "anton", label: "Condensed" },
-          { value: "inter", label: "Clean" },
+      <Field label="Reveal">
+        <Segmented label="Reveal" value={lyrics.reveal} onChange={(reveal) => set({ reveal })} options={[
+          { value: "word", label: "Word" },
+          { value: "sweep", label: "Karaoke" },
+          { value: "line", label: "Line" },
+        ]} />
+      </Field>
+      <Field label="Effect">
+        <Segmented label="Effect" value={lyrics.effect} onChange={(effect) => set({ effect })} options={[
+          { value: "none", label: "None" },
+          { value: "glow", label: "Glow" },
+          { value: "outline", label: "Outline" },
+          { value: "pop", label: "Pop" },
         ]} />
       </Field>
       <Field label="Size">
@@ -305,6 +396,13 @@ function LyricsTab() {
           { value: "l", label: "Large" },
         ]} />
       </Field>
+      <Field label="Align">
+        <Segmented label="Align" value={lyrics.align} onChange={(align) => set({ align })} options={[
+          { value: "left", label: "Left" },
+          { value: "center", label: "Center" },
+        ]} />
+      </Field>
+      <Toggle label="All caps" checked={lyrics.caps} onChange={(caps) => set({ caps })} />
     </Group>
   );
 }

@@ -20,6 +20,7 @@ import { LayoutGroup, MotionConfig } from "framer-motion";
 import { rgba } from "@/lib/albumTheme";
 import type { LyricLine } from "@/lib/lyrics";
 import { effectiveConfig } from "@/lib/display/config";
+import { loadFonts } from "@/lib/display/fonts";
 import { LYRIC_SCALE, panelClass, textHalo, themeCssVars } from "@/lib/display/theme";
 import { DisplayConfigProvider, useDisplayConfig } from "@/hooks/useDisplayConfig";
 import { usePartyPlayback } from "@/hooks/usePartyPlayback";
@@ -101,6 +102,9 @@ function PartyDashboard() {
   const closeSettings = useCallback(() => setSettingsOpen(false), []);
   const idle = useIdle(IDLE_MS);
   const chromeHidden = idle && !settingsOpen; // hide cursor + corner buttons
+
+  // Fetch the picked lyric font (only that one) from Google Fonts.
+  useEffect(() => loadFonts([config.lyrics.font]), [config.lyrics.font]);
 
   // S = settings, F = fullscreen, Esc = close settings.
   useEffect(() => {
@@ -216,6 +220,10 @@ function PartyDashboard() {
                   reveal={config.lyrics.reveal}
                   scale={LYRIC_SCALE[config.lyrics.size]}
                   fontKey={config.lyrics.font}
+                  layout={config.lyrics.layout}
+                  caps={config.lyrics.caps}
+                  align={config.lyrics.align}
+                  effect={config.lyrics.effect}
                 />
               }
               side={side}

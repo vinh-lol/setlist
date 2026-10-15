@@ -7,6 +7,7 @@ import type { ColorMode, DisplayConfig } from "@/lib/display/config";
 import type { SpotifyTrack } from "@/lib/types";
 import CanvasScene from "./backgrounds/CanvasScene";
 import Billboard from "./backgrounds/Billboard";
+import Visualizer from "./backgrounds/Visualizer";
 import Vinyl from "./backgrounds/Vinyl";
 import { cityScene } from "./backgrounds/city";
 import { synthwaveScene } from "./backgrounds/synthwave";
@@ -32,7 +33,7 @@ type Background = DisplayConfig["background"];
 //   image  = your own image or GIF URL, treated the same way (cover if empty)
 //   solid  = just the theme surface color (painted by the page root)
 //   city, synthwave, stars, bokeh = canvas scenes (components/party/backgrounds)
-//   billboard = still night city with a lit billboard (cover or lyric line)
+//   billboard = night city (skyline held in place) with a lit billboard
 //   vinyl  = spinning record with the cover as its label
 // Scenes are night-time by nature, so their dim darkens instead of tinting.
 // dim tints every type except solid. blur only does work for the 3D gradient:
@@ -81,9 +82,15 @@ function DisplayBackground({
   if (background.type === "billboard") {
     return (
       <>
-        <Billboard palette={palette} track={track} lyricLine={lyricLine} show={background.billboard} />
+        <Billboard palette={palette} track={track} lyricLine={lyricLine} show={background.billboard} speed={background.speed} fps={lowPower ? 15 : 30} />
         <Veil theme={theme} background={background} color="#000000" />
       </>
+    );
+  }
+  if (background.type === "visualizer") {
+    const v = background.visualizer;
+    return (
+      <Visualizer palette={palette} speed={background.speed} source={v.source} tint={v.tint} change={v.change} trackId={track?.id ?? null} />
     );
   }
   if (background.type === "vinyl") {
