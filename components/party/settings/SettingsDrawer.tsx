@@ -4,7 +4,7 @@ import { memo, useEffect, useMemo, useRef, useState, useSyncExternalStore, type 
 import { AnimatePresence, motion } from "framer-motion";
 import { rgba, type AlbumTheme } from "@/lib/albumTheme";
 import { backgroundInfo } from "@/lib/display/backgrounds";
-import { FONT_SIZE_FIX, LYRIC_FONTS, LYRIC_FONT_IDS, loadFonts } from "@/lib/display/fonts";
+import { FONT_SIZE_FIX, LYRIC_FONTS, LYRIC_FONT_IDS, loadFonts, lyricFont } from "@/lib/display/fonts";
 import BackgroundGallery from "./BackgroundGallery";
 import { getMicState, startMic, subscribe as subscribeMic, visualizerSupported, type MicStatus } from "@/lib/display/visualizerAudio";
 import { useDisplayConfig } from "@/hooks/useDisplayConfig";
@@ -422,35 +422,65 @@ function PanelsTab() {
   );
 }
 
+function Section({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="space-y-4">
+      <h3 className="text-[11px] font-black uppercase tracking-[0.14em] text-[color:var(--ink-50)] border-b pb-1.5" style={{ borderColor: "var(--ink-10)" }}>{title}</h3>
+      {children}
+    </section>
+  );
+}
+
 function WidgetsTab() {
   const [w, set] = useSection("widgets");
+  const fontOptions = LYRIC_FONTS.map((f) => ({ value: f.id, label: f.name }));
   return (
-    <Group>
-      <Toggle label="Now playing" checked={w.nowPlaying} onChange={(nowPlaying) => set({ nowPlaying })} />
-      <Toggle label="Playback controls" hint="Hide on a TV nobody will click." checked={w.transport} onChange={(transport) => set({ transport })} />
-      <Toggle label="Up next" checked={w.upNext.show} onChange={(show) => set({ upNext: { ...w.upNext, show } })}>
-        <Field label="Songs shown">
-          <Segmented label="Songs shown" value={w.upNext.count} onChange={(count) => set({ upNext: { ...w.upNext, count } })} options={[
-            { value: "auto", label: "Auto" },
-            ...[2, 3, 4, 5, 6].map((n) => ({ value: n, label: String(n) })),
-          ]} />
-        </Field>
-      </Toggle>
-      <Toggle label="Clock" checked={w.clock.show} onChange={(show) => set({ clock: { ...w.clock, show } })}>
-        <Toggle label="12-hour" checked={w.clock.hour12} onChange={(hour12) => set({ clock: { ...w.clock, hour12 } })} />
-        <Toggle label="Seconds" checked={w.clock.seconds} onChange={(seconds) => set({ clock: { ...w.clock, seconds } })} />
-      </Toggle>
-      <Toggle label="Date" checked={w.clock.date} onChange={(date) => set({ clock: { ...w.clock, date } })} />
-      <Toggle label="Party title" checked={w.title.show} onChange={(show) => set({ title: { ...w.title, show } })}>
-        <Field label="Title font">
-          <Segmented label="Title font" value={w.title.font} onChange={(font) => set({ title: { ...w.title, font } })} options={[
-            { value: "inter", label: "Clean" },
-            { value: "anton", label: "Condensed" },
-          ]} />
-        </Field>
-      </Toggle>
-      <Toggle label="Info list" checked={w.info} onChange={(info) => set({ info })} />
-    </Group>
+    <div className="space-y-7">
+      <Section title="Right side">
+        <Toggle label="Show the right side" hint="Off gives the lyrics the full width." checked={w.side} onChange={(side) => set({ side })} />
+        {w.side && (
+          <>
+            <Toggle label="Clock" checked={w.clock.show} onChange={(show) => set({ clock: { ...w.clock, show } })}>
+              <Toggle label="12-hour" checked={w.clock.hour12} onChange={(hour12) => set({ clock: { ...w.clock, hour12 } })} />
+              <Toggle label="Seconds" checked={w.clock.seconds} onChange={(seconds) => set({ clock: { ...w.clock, seconds } })} />
+            </Toggle>
+            <Toggle label="Date" checked={w.clock.date} onChange={(date) => set({ clock: { ...w.clock, date } })} />
+            <Toggle label="Party title" checked={w.title.show} onChange={(show) => set({ title: { ...w.title, show } })}>
+              <Field label="Title font">
+                <select
+                  aria-label="Title font"
+                  value={w.title.font}
+                  onChange={(e) => set({ title: { ...w.title, font: e.target.value as typeof w.title.font } })}
+                  className="w-full rounded-lg px-3 py-2 text-sm border bg-transparent"
+                  style={{ borderColor: "var(--ink-15)", color: "var(--ink)", fontFamily: lyricFont(w.title.font).family }}
+                >
+                  {fontOptions.map((o) => <option key={o.value} value={o.value} style={{ color: "#111" }}>{o.label}</option>)}
+                </select>
+              </Field>
+              <Toggle label="Accent line under the title" checked={w.title.divider} onChange={(divider) => set({ title: { ...w.title, divider } })} />
+            </Toggle>
+            <Toggle label="Info list" checked={w.info} onChange={(info) => set({ info })}>
+              <Toggle label="“Info” heading" checked={w.infoHeading} onChange={(infoHeading) => set({ infoHeading })} />
+              <Toggle label="Times" checked={w.infoTimes} onChange={(infoTimes) => set({ infoTimes })} />
+            </Toggle>
+          </>
+        )}
+      </Section>
+      <Section title="Main">
+        <Toggle label="Now playing" checked={w.nowPlaying} onChange={(nowPlaying) => set({ nowPlaying })} />
+        <Toggle label="Playback controls" hint="Hide on a TV nobody will click." checked={w.transport} onChange={(transport) => set({ transport })} />
+      </Section>
+      <Section title="Bottom">
+        <Toggle label="Up next" checked={w.upNext.show} onChange={(show) => set({ upNext: { ...w.upNext, show } })}>
+          <Field label="Songs shown">
+            <Segmented label="Songs shown" value={w.upNext.count} onChange={(count) => set({ upNext: { ...w.upNext, count } })} options={[
+              { value: "auto", label: "Auto" },
+              ...[2, 3, 4, 5, 6].map((n) => ({ value: n, label: String(n) })),
+            ]} />
+          </Field>
+        </Toggle>
+      </Section>
+    </div>
   );
 }
 

@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import type { LyricLine } from "@/lib/lyrics";
+import { splitWords, wordFills, wordTimes } from "@/lib/lyricTiming";
 
 interface Props {
   lines: LyricLine[] | null;
@@ -24,8 +25,6 @@ interface Props {
 
 const FADE_MASK = "linear-gradient(to bottom, transparent, black 4%, black 90%, transparent)";
 const ANCHOR_FRAC = 0.06; // current line sits at the top, aligned with the cover/title
-const MAX_WORD_MS = 700;  // cap per-word reveal so a held note / instrumental gap can't crawl
-const LAST_WORD_MS = 380; // steady fallback pace for the final line (no next line to time against)
 const BASE_SIZE = "clamp(2.25rem, 4.6vw, 4.5rem)";
 
 function Empty({ children }: { children: React.ReactNode }) {
@@ -34,34 +33,6 @@ function Empty({ children }: { children: React.ReactNode }) {
       {children}
     </div>
   );
-}
-
-const splitWords = (text: string) => (text || "♪").split(/\s+/).filter(Boolean);
-
-/**
- * How far each word of the current line is filled (0..1). The reveal is spread
- * across the line's real on-screen window (the gap to the next line), capped so
- * a held note can't make it crawl, and weighted by word length (a rough proxy
- * for how long each word is sung).
- */
-function wordFills(lines: LyricLine[], idx: number, positionMs: number, started: boolean, reveal: Props["reveal"]): number[] {
-  const cur = lines[idx];
-  const nxt = lines[idx + 1] ?? null;
-  const words = splitWords(cur?.text ?? "");
-  if (!started) return words.map(() => 0);
-  if (reveal === "line") return words.map(() => 1);
-  const gap = nxt ? nxt.timeMs - cur.timeMs : Infinity;
-  const dur = Number.isFinite(gap) ? Math.min(gap, words.length * MAX_WORD_MS) : words.length * LAST_WORD_MS;
-  const frac = Math.min(1, Math.max(0, (positionMs - cur.timeMs) / dur));
-  const lens = words.map((w) => Math.max(2, w.replace(/[^\p{L}\p{N}]/gu, "").length || w.length));
-  const total = lens.reduce((a, b) => a + b, 0) || 1;
-  let acc = 0;
-  return lens.map((len) => {
-    const start = acc / total, end = (acc + len) / total;
-    acc += len;
-    if (reveal === "sweep") return Math.min(1, Math.max(0, (frac - start) / (end - start)));
-    return frac >= start ? 1 : 0; // word: lit as soon as its turn starts
-  });
 }
 
 /** One word, styled for its fill amount and the chosen effect. */
@@ -162,18 +133,19 @@ export default function PartyLyrics({
 
   if (lines && lines.length > 0) {
     const started = activeIdx >= 0;
-    const fills = wordFills(lines, idx, positionMs, started, reveal);
+    const times = wordTimes(lines, idx);
+    const fills = wordFills(times, positionMs, started, reveal);
     // the word being sung right now (for the pop effect)
-    const activeWord = reveal === "sweep" ? fills.findIndex((f) => f > 0 && f < 1) : fills.lastIndexOf(1);
+    const activeWord = started ? times.findIndex((t) => positionMs >= t.start && positionMs < t.end) : -1;
 
-    const renderLine = (text: string, lineFills: number[] | null) =>
+    const renderLine = (text: string, lineFills: number[] | null, isCurrent = !!lineFills) =>
       splitWords(text).map((w, wi) => (
         <Word
           key={wi}
           text={w}
           fill={lineFills ? lineFills[wi] ?? 0 : 0}
-          current={!!lineFills}
-          active={!!lineFills && wi === activeWord && reveal !== "line"}
+          current={isCurrent}
+          active={isCurrent && wi === activeWord && reveal !== "line"}
           accent={accent}
           faint={faint}
           reveal={reveal}
@@ -182,19 +154,7 @@ export default function PartyLyrics({
       ));
 
     if (layout === "focus") {
-      const nxt = lines[idx + 1];
-      return (
-        <div className="relative h-full overflow-hidden flex flex-col justify-center px-6" style={{ alignItems: align === "center" ? "center" : "flex-start" }}>
-          <p key={idx} className={`party-lyric-in w-full ${textClass}`} style={textStyle(1.35)}>
-            {renderLine(lines[idx].text, fills)}
-          </p>
-          {nxt && (
-            <p key={`n${idx}`} className={`party-lyric-in w-full mt-[0.6em] ${textClass}`} style={{ ...textStyle(0.5), color: faint }}>
-              {splitWords(nxt.text).join(" ")}
-            </p>
-          )}
-        </div>
-      );
+      return <FocusLines lines={lines} idx={idx} fills={fills} renderLine={renderLine} textClass={textClass} textStyle={textStyle} align={align} measureKey={`${scale}|${fontKey}|${caps}|${align}`} />;
     }
 
     return (
@@ -235,4 +195,83 @@ export default function PartyLyrics({
   }
 
   return <Empty>no lyrics for this one</Empty>;
+}
+
+// One line: the current line big in the middle, the next one small under it.
+// Lines are keyed by their index and only move with transforms, so when a line
+// ends it slides up and fades while the next one grows up into its place,
+// instead of the whole line being swapped out. Every line is laid out at full
+// size (the small one is scaled down), so nothing re-wraps mid-move.
+const NEXT_SCALE = 0.42;
+const EASE = "cubic-bezier(0.22, 1, 0.36, 1)";
+
+function FocusLines({
+  lines, idx, fills, renderLine, textClass, textStyle, align, measureKey,
+}: {
+  lines: LyricLine[];
+  idx: number;
+  fills: number[];
+  renderLine: (text: string, fills: number[] | null, isCurrent?: boolean) => React.ReactNode;
+  textClass: string;
+  textStyle: (mult: number) => CSSProperties;
+  align: "left" | "center";
+  measureKey: string;
+}) {
+  const boxRef = useRef<HTMLDivElement>(null);
+  const refs = useRef(new Map<number, HTMLDivElement>());
+  const [box, setBox] = useState(0);
+  const [heights, setHeights] = useState<Record<number, number>>({});
+  const window_ = [idx - 1, idx, idx + 1, idx + 2].filter((i) => i >= 0 && i < lines.length);
+
+  useLayoutEffect(() => {
+    const measure = () => {
+      setBox(boxRef.current?.clientHeight ?? 0);
+      const next: Record<number, number> = {};
+      refs.current.forEach((el, i) => { next[i] = el.offsetHeight; });
+      setHeights((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
+    };
+    measure();
+    document.fonts?.ready.then(measure).catch(() => {});
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(measure) : null;
+    if (boxRef.current) ro?.observe(boxRef.current);
+    return () => ro?.disconnect();
+  }, [idx, lines, measureKey]);
+
+  const h = (i: number) => heights[i] ?? box * 0.25;
+  const gap = h(idx) * 0.12;
+  const curTop = (box - h(idx) - h(idx + 1) * NEXT_SCALE - gap) / 2; // current + next, centered together
+  const place = (i: number): { y: number; s: number; o: number } => {
+    const rel = i - idx;
+    if (rel === 0) return { y: curTop, s: 1, o: 1 };
+    if (rel === 1) return { y: curTop + h(idx) + gap, s: NEXT_SCALE, o: 1 };
+    if (rel < 0) return { y: curTop - h(i) * 0.75, s: 0.9, o: 0 };
+    return { y: curTop + h(idx) + gap + h(idx + 1) * NEXT_SCALE + gap, s: NEXT_SCALE * 0.9, o: 0 };
+  };
+
+  return (
+    <div ref={boxRef} className="relative h-full overflow-hidden">
+      {window_.map((i) => {
+        const { y, s, o } = place(i);
+        const rel = i - idx;
+        return (
+          <div
+            key={i}
+            ref={(el) => { if (el) refs.current.set(i, el); else refs.current.delete(i); }}
+            className="absolute inset-x-0 top-0 px-6 motion-reduce:transition-none"
+            style={{
+              transform: `translateY(${y}px) scale(${s})`,
+              transformOrigin: align === "center" ? "50% 0" : "0 0",
+              opacity: o,
+              transition: `transform 650ms ${EASE}, opacity 450ms ease-out`,
+            }}
+          >
+            <p className={textClass} style={textStyle(1.35)}>
+              {/* the line leaving stays lit as it slides away */}
+              {renderLine(lines[i].text, rel === 0 ? fills : rel < 0 ? splitWords(lines[i].text).map(() => 1) : null, rel === 0)}
+            </p>
+          </div>
+        );
+      })}
+    </div>
+  );
 }

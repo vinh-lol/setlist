@@ -103,8 +103,8 @@ function PartyDashboard() {
   const idle = useIdle(IDLE_MS);
   const chromeHidden = idle && !settingsOpen; // hide cursor + corner buttons
 
-  // Fetch the picked lyric font (only that one) from Google Fonts.
-  useEffect(() => loadFonts([config.lyrics.font]), [config.lyrics.font]);
+  // Fetch the picked lyric and title fonts (only those) from Google Fonts.
+  useEffect(() => loadFonts([config.lyrics.font, config.widgets.title.font]), [config.lyrics.font, config.widgets.title.font]);
 
   // S = settings, F = fullscreen, Esc = close settings.
   useEffect(() => {
@@ -149,7 +149,7 @@ function PartyDashboard() {
   const w = config.widgets;
   const halo = textHalo(theme);
   const glass = panelClass(config.panels.style);
-  const hasSide = w.clock.show || w.clock.date || w.title.show || w.info;
+  const hasSide = w.side && (w.clock.show || w.clock.date || w.title.show || w.info);
   const side = hasSide ? <TitleBlock halo={halo} isFullscreen={isFullscreen} /> : null;
   const cover = <AlbumArt track={current} theme={theme} />;
   // Upcoming (not yet sung) lyric words; brighter on forced dark so they don't sink.

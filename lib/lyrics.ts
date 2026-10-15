@@ -1,8 +1,15 @@
 import type { SpotifyTrack } from "@/lib/types";
 
+export interface LyricWord {
+  text: string;
+  timeMs: number;
+}
+
 export interface LyricLine {
   timeMs: number;
   text: string;
+  /** Word start times, when the source has them (enhanced LRC). */
+  words?: LyricWord[];
 }
 
 export interface LyricsResult {
@@ -67,20 +74,42 @@ export function prefetchLyrics(track: SpotifyTrack | null | undefined): void {
 
 // Matches LRC timestamps like [01:23.45] or [01:23] (also tolerates [mm:ss:xx])
 const TIMESTAMP = /\[(\d{1,2}):(\d{2})(?:[.:](\d{1,3}))?\]/g;
+// Enhanced LRC word tags: <01:23.45>word <01:24.10>word
+const WORD_TAG = /<(\d{1,2}):(\d{2})(?:[.:](\d{1,3}))?>/g;
+
+const toMs = (m: RegExpMatchArray) =>
+  (parseInt(m[1], 10) * 60 + parseInt(m[2], 10)) * 1000 + (m[3] ? parseInt(m[3].padEnd(3, "0").slice(0, 3), 10) : 0);
+
+/** Pulls word start times out of an enhanced-LRC line body, if it has any. */
+function parseWords(body: string): { text: string; words?: LyricWord[] } {
+  const tags = [...body.matchAll(WORD_TAG)];
+  const text = body.replace(WORD_TAG, "").replace(/\s+/g, " ").trim();
+  if (tags.length === 0) return { text };
+  const words: LyricWord[] = [];
+  tags.forEach((m, i) => {
+    const from = (m.index ?? 0) + m[0].length;
+    const to = i + 1 < tags.length ? tags[i + 1].index ?? body.length : body.length;
+    const chunk = body.slice(from, to).trim();
+    // a chunk may hold several words; they share the tag's time
+    for (const w of chunk.split(/\s+/).filter(Boolean)) words.push({ text: w, timeMs: toMs(m) });
+  });
+  return { text, words: words.length ? words : undefined };
+}
 
 // Parses an LRC string into time-sorted lines. A single line may carry several
-// timestamps (repeated lyrics) — each becomes its own entry.
+// timestamps (repeated lyrics) — each becomes its own entry. Enhanced LRC word
+// tags are kept as per-word times.
 export function parseLrc(lrc: string): LyricLine[] {
   const lines: LyricLine[] = [];
   for (const raw of lrc.split("\n")) {
     const matches = [...raw.matchAll(TIMESTAMP)];
     if (matches.length === 0) continue;
-    const text = raw.replace(TIMESTAMP, "").trim();
+    const { text, words } = parseWords(raw.replace(TIMESTAMP, ""));
     for (const m of matches) {
-      const min = parseInt(m[1], 10);
-      const sec = parseInt(m[2], 10);
-      const frac = m[3] ? parseInt(m[3].padEnd(3, "0").slice(0, 3), 10) : 0;
-      lines.push({ timeMs: (min * 60 + sec) * 1000 + frac, text });
+      const timeMs = toMs(m);
+      // repeated lines: shift the word times along with the line
+      const shift = words ? timeMs - toMs(matches[0]) : 0;
+      lines.push({ timeMs, text, words: words?.map((w) => ({ ...w, timeMs: w.timeMs + shift })) });
     }
   }
   return lines.sort((a, b) => a.timeMs - b.timeMs);

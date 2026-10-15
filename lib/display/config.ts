@@ -37,7 +37,7 @@ export type LyricsEffect = "none" | "glow" | "outline" | "pop";
 export type Size = "s" | "m" | "l";
 export type LayoutPreset = "classic" | "hero" | "lyricsOnly" | "minimal";
 export type PanelStyle = "glass" | "solid" | "none";
-export type TitleFont = "anton" | "inter";
+export type TitleFont = LyricFontId;
 export type GoveeMode = "palette" | "accent";
 
 export interface DisplayConfig {
@@ -96,8 +96,12 @@ export interface DisplayConfig {
     /** count "auto" = 5 next to lyrics, 6 in the hero layout. */
     upNext: { show: boolean; count: number | "auto" };
     clock: { show: boolean; hour12: boolean; seconds: boolean; date: boolean };
-    title: { show: boolean; font: TitleFont };
+    /** The whole right column (clock, date, title, info). */
+    side: boolean;
+    title: { show: boolean; font: TitleFont; divider: boolean };
     info: boolean;
+    infoHeading: boolean;
+    infoTimes: boolean;
     requestQr: boolean;
   };
   lights: { govee: { enabled: boolean; mode: GoveeMode } };
@@ -162,8 +166,11 @@ export const DEFAULT_CONFIG: DisplayConfig = {
     transport: true,
     upNext: { show: true, count: "auto" },
     clock: { show: true, hour12: false, seconds: true, date: true },
-    title: { show: true, font: "inter" },
+    side: true,
+    title: { show: true, font: "inter", divider: true },
     info: true,
+    infoHeading: true,
+    infoTimes: true,
     requestQr: false,
   },
   lights: { govee: { enabled: true, mode: "palette" } },
@@ -266,7 +273,7 @@ export function normalizeConfig(input: unknown): DisplayConfig {
   const count = (input as { widgets?: { upNext?: { count?: unknown } } } | null)?.widgets?.upNext?.count;
   c.widgets.upNext.count =
     typeof count === "number" && Number.isFinite(count) ? clampNum(Math.round(count), 0, 6) : "auto";
-  c.widgets.title.font = oneOf(c.widgets.title.font, ["anton", "inter"], d.widgets.title.font);
+  c.widgets.title.font = oneOf(c.widgets.title.font, LYRIC_FONT_IDS, d.widgets.title.font);
   c.lights.govee.mode = oneOf(c.lights.govee.mode, ["palette", "accent"], d.lights.govee.mode);
 
   return c;

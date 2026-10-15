@@ -22,14 +22,33 @@ export interface PartyPlayback {
   playPause: () => void;
 }
 
+const SNAP_MS = 1200; // farther off than this = a real jump (seek, skip)
+const NUDGE = 0.25;   // share of a small error corrected per sample
+
 export function usePartyPlayback(token: string): PartyPlayback {
   const [queue, setQueue] = useState<SpotifyTrack[]>([]);
   const [positionMs, setPositionMs] = useState(0);
   const [optimisticPlaying, setOptimisticPlaying] = useState<boolean | null>(null);
 
   const nowPlaying = useCurrentlyPlaying(token);
-  const anchorRef = useRef<{ at: number; progress: number; playing: boolean } | null>(null);
-  if (nowPlaying) anchorRef.current = { at: nowPlaying.fetchedAt, progress: nowPlaying.progressMs, playing: nowPlaying.isPlaying };
+
+  // Playback clock. Each poll's position is a little noisy (network and
+  // Spotify's own sampling wobble by ~100-300ms), and snapping to every sample
+  // made the lyrics jitter: a word could light, un-light, then light again.
+  // So the clock runs on its own and each sample only nudges it a quarter of
+  // the way. A big disagreement (seek, skip, pause/resume, new song) still
+  // snaps straight to the new position.
+  const clockRef = useRef<{ trackId: string; playing: boolean; offset: number; paused: number; sampleAt: number } | null>(null);
+  if (nowPlaying && clockRef.current?.sampleAt !== nowPlaying.fetchedAt) {
+    const c = clockRef.current;
+    const sample = nowPlaying.progressMs;
+    const at = nowPlaying.fetchedAt;
+    const predicted = c ? (c.playing ? at + c.offset : c.paused) : NaN;
+    const err = sample - predicted;
+    const snap = !c || c.trackId !== nowPlaying.trackId || c.playing !== nowPlaying.isPlaying || !(Math.abs(err) < SNAP_MS);
+    const pos = snap ? sample : predicted + err * NUDGE;
+    clockRef.current = { trackId: nowPlaying.trackId, playing: nowPlaying.isPlaying, offset: pos - at, paused: pos, sampleAt: at };
+  }
 
   // Live Spotify queue
   useEffect(() => {
@@ -46,8 +65,8 @@ export function usePartyPlayback(token: string): PartyPlayback {
   // Smooth playback clock
   useEffect(() => {
     const tick = () => {
-      const a = anchorRef.current;
-      if (a) setPositionMs(a.playing ? a.progress + (Date.now() - a.at) : a.progress);
+      const c = clockRef.current;
+      if (c) setPositionMs(c.playing ? Date.now() + c.offset : c.paused);
     };
     tick();
     const id = setInterval(tick, 100);
